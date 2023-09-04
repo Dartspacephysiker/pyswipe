@@ -1,0 +1,53 @@
+language: python
+python:
+  - "3.6"
+  - "3.5"
+  - "3.4"
+  - "2.7"
+
+
+addons:
+  apt:
+    packages:
+    - gfortran
+env:
+
+  global:
+    LD_PRELOAD=/lib/x86_64-linux-gnu/libSegFault.so
+
+before_install:
+  - python --version
+  - mkdir tmp
+  - cd tmp
+
+install: 
+  - pip install -r ../requirements.txt 
+  - pip install flake8 pytest==3.0.7 pytest-cov==2.6.0
+
+before_script:
+  cd ..
+
+script:
+  - python setup.py check -m -r
+  - pytest tests --cov 
+  
+  # Check style with below command
+  #- flake8 tests pyswipe --ignore E128,E201,E202,E221,E222,E226,E241,E251,W291,W503 --exclude coefficients/
+
+  # Description of ignored rules
+        # E128,  # continuation line under-indented for visual indent
+        # E201,  # whitespace after ‘(‘
+        # E202,  # whitespace before ‘(‘
+        # E203,  # whitespace before ':'
+        # E221,  # multiple spaces before operator
+        # E222,  # multiple spaces after operator
+        # E226,  # missing whitespace around arithmetic operator
+        # E241,  # multiple spaces after ','
+        # E251,  # unexpected spaces around keyword / parameter equals
+        # W291,  # trailing whitespace
+        # W503,  # line break before binary operator
+        
+        
+
+notifications:
+  email: false

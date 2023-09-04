@@ -1,0 +1,6 @@
+[run]
+source=pyswipe
+
+[report]
+exclude_lines = 
+  def plot_currents
