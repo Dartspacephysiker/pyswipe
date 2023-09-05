@@ -1,6 +1,8 @@
 include LICENSE
 include README.rst
 
+include pyswipe/coefficients *.txt
+
 graft docs
 graft tests
 
