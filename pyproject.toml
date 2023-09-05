@@ -37,6 +37,7 @@ dependencies = [
     "dask",
     "apexpy >= 1.0",
     "ppigrf >= 1.0",
+    "pyamps >= 1.4.0",
 ]
 
 [project.optional-dependencies]
