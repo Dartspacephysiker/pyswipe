@@ -36,7 +36,7 @@ dependencies = [
     "pandas >= 0.20",
     "dask",
     "apexpy >= 1.0",
-    "ppigrf",
+    "ppigrf >= 1.0",
 ]
 
 [project.optional-dependencies]
