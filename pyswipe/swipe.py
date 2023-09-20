@@ -2066,7 +2066,7 @@ class SWIPE(object):
             pax_c.yaxis.set_label_position("right")
             pax_c.yaxis.tick_right()
 
-        plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
+        plt.subplots_adjust(hspace = 0.1, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
 
         _ = self._make_figtitle(fig)
 
@@ -2214,15 +2214,15 @@ class SWIPE(object):
         #                             vmin=vmin,
         #                             vmax=vmax)
 
-        good = np.isfinite(SigmaH) & np.isfinite(SigmaP) & (np.abs(SigmaP) > 0)
-        goodN = np.isfinite(SigmaHN) & np.isfinite(SigmaPN) & (np.abs(SigmaPN) > 0)
-        goodS = np.isfinite(SigmaHS) & np.isfinite(SigmaPS) & (np.abs(SigmaPS) > 0)
+        # good = np.isfinite(SigmaH) & np.isfinite(SigmaP) & (np.abs(SigmaP) > 0)
+        # goodN = np.isfinite(SigmaHN) & np.isfinite(SigmaPN) & (np.abs(SigmaPN) > 0)
+        # goodS = np.isfinite(SigmaHS) & np.isfinite(SigmaPS) & (np.abs(SigmaPS) > 0)
         # sigplevels = _get_siglevels(SigmaH[good]/SigmaP[good],
         #                             vmin=np.quantile(SigmaH[good]/SigmaP[good],0.03),
         #                             vmax=np.quantile(SigmaH[good]/SigmaP[good],0.97))
-        sigplevels = _get_siglevels(SigmaP[good],
-                                    vmin=np.quantile(SigmaP[good],0.03),
-                                    vmax=np.quantile(SigmaP[good],0.97))
+        sigplevels = _get_siglevels(SigmaP,
+                                    vmin=vmin,
+                                    vmax=vmax)
 
         if cmap is None:
             cmapper = plt.cm.magma
@@ -2294,23 +2294,23 @@ class SWIPE(object):
             pax_c.yaxis.set_label_position("right")
             pax_c.yaxis.tick_right()
 
-        plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
+        plt.subplots_adjust(hspace = 0.1, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
 
         plt.show()
 
         return fig, (paxh_n, paxh_s, paxh_c, paxp_n, paxp_s, paxp_c)
 
 
-    def plot_joule_dissip(self,
-                          flip_panel_order=False,
-                          vmin=None,
-                          vmax=None,
-                          cmap=None,
-                          axN=None,
-                          axS=None,
-                          cax=None,
-                          cax_opts=dict(),
-                          suppress_labels=False):
+    def plot_emwork(self,
+                    flip_panel_order=False,
+                    vmin=None,
+                    vmax=None,
+                    cmap=None,
+                    axN=None,
+                    axS=None,
+                    cax=None,
+                    cax_opts=dict(),
+                    suppress_labels=False):
         """ 
         Create a summary plot of the ionospheric Joule dissipation
 
@@ -2326,7 +2326,7 @@ class SWIPE(object):
                      20, # dipole tilt angle in degrees
                      150) # F10.7 index in s.f.u.
         >>> # make summary plot:
-        >>> m.plot_joule_dissip()
+        >>> m.plot_emwork()
 
         """
 
@@ -2338,7 +2338,7 @@ class SWIPE(object):
         # Want the scalar grid? Uncomment here
         mlat,mlt = self.scalargrid
         mlat,mlt = mlat.ravel(),mlt.ravel()
-        JH = self.get_joule_dissipation(mlat,mlt)
+        JH = self.get_emwork(mlat,mlt)
 
         JHN,JHS = np.split(JH,2)
 
@@ -2412,7 +2412,7 @@ class SWIPE(object):
                        levels = siglevels, cmap = cmapper)
         pax_c.set_xticks([])
         # pax_c.set_ylabel(r'downward    $\mu$A/m$^2$      upward', size = 18)
-        pax_c.set_ylabel(r'$W_J$ [mW/m$^2$]', size = 18)
+        pax_c.set_ylabel(r'$W_{EM}$ [mW/m$^2$]', size = 18)
         pax_c.yaxis.set_label_position("right")
         pax_c.yaxis.tick_right()
 
@@ -2432,9 +2432,9 @@ class SWIPE(object):
             # Integrated power in GW
             integN = np.sum((JHN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
             integS = np.sum((JHS*1e-3)*(binareas*1e6))/1e9
-            pax_n.write(self.minlat, 9, f"{integN:4.1f}",
+            pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
-            pax_s.write(self.minlat, 9, f"{integS:4.1f}",
+            pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
 
 
