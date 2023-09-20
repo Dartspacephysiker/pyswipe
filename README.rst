@@ -6,10 +6,10 @@ Python interface for the Swarm Ionospheric Polar Electrodynamics (SWIPE) model.
 
 The SWIPE model is an empirical model of high-latitude ionospheric electrodynamics, and is a combination of the Average Magnetic field and Polar current System (AMPS) model and the Swarm High-latitude Convection (Swarm Hi-C) model.
 
-**AMPS
+** AMPS
 The AMPS model magnetic field and currents are continuous functions of solar wind velocity, the interplanetary magnetic field, the tilt of the Earth's dipole magnetic field with respect to the Sun, and the 10.7 cm solar radio flux index F10.7. Given these parameters, model values of the ionospheric magnetic field can be calculated anywhere in space, and, with certain assumptions, on ground. The full current system, horizontal + field-aligned, are defined everywhere in the polar regions. The model is based on magnetic field measurements from the low Earth orbiting Swarm and CHAMP satellites.
 
-**Swarm Hi-C
+** Swarm Hi-C
 The Swarm Hi-C model high-latitude ionospheric convection is a function of the same input parameters used for the AMPS model. Given these parameters, model values of the high-latitude ionospheric convection, potential, and electric field can be calculated. The model is based on ion drift measurements from Swarm A and Swarm C.
 
 pyswipe can be used to calculate and plot several different quantities on a grid. The parameters that are available for calculation/plotting are:
