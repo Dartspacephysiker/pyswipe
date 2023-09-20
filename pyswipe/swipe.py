@@ -2274,6 +2274,8 @@ class SWIPE(object):
             paxp_n.contourf(mlat[goodN], mlt[goodN], SigmaHN[goodN]/SigmaPN[goodN],levels=sigplevels,cmap=cmapper,extend='both')
             paxp_s.contourf(mlat[goodS], mlt[goodS], SigmaHS[goodS]/SigmaPS[goodS],levels=sigplevels,cmap=cmapper,extend='both')
 
+        _ = self._make_figtitle(fig)
+
         # colorbar
         paxh_c.contourf(np.vstack((np.zeros_like(sighlevels), np.ones_like(sighlevels))), 
                        np.vstack((sighlevels, sighlevels)), 
@@ -2293,8 +2295,6 @@ class SWIPE(object):
             pax_c.yaxis.tick_right()
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-
-        _ = self._make_figtitle(fig)
 
         plt.show()
 
