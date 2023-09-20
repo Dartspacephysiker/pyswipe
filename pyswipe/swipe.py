@@ -1895,11 +1895,11 @@ class SWIPE(object):
         return fig, (pax_n, pax_s, pax_c)
 
 
-    def plot_conductance(self,
-                         flip_panel_order=False,
-                         vmin=None,
-                         vmax=None,
-                         cmap=None):
+    def plot_conductance_contours(self,
+                                  flip_panel_order=False,
+                                  vmin=None,
+                                  vmax=None,
+                                  cmap=None):
         """ 
         Create a summary plot of the ionospheric Hall and Pedersen conductances
 
@@ -1915,7 +1915,7 @@ class SWIPE(object):
                      20, # dipole tilt angle in degrees
                      150) # F10.7 index in s.f.u.
         >>> # make summary plot:
-        >>> m.plot_conductance()
+        >>> m.plot_conductance_contours()
 
         """
 
@@ -2075,7 +2075,7 @@ class SWIPE(object):
         return fig, (paxh_n, paxh_s, paxh_c, paxp_n, paxp_s, paxp_c)
 
 
-    def plot_conductance2(self,
+    def plot_conductance(self,
                           flip_panel_order=False,
                           vmin=None,
                           vmax=None,
@@ -2095,7 +2095,7 @@ class SWIPE(object):
                      20, # dipole tilt angle in degrees
                      150) # F10.7 index in s.f.u.
         >>> # make summary plot:
-        >>> m.plot_conductance2()
+        >>> m.plot_conductance()
 
         """
 
@@ -2274,8 +2274,6 @@ class SWIPE(object):
             paxp_n.contourf(mlat[goodN], mlt[goodN], SigmaHN[goodN]/SigmaPN[goodN],levels=sigplevels,cmap=cmapper,extend='both')
             paxp_s.contourf(mlat[goodS], mlt[goodS], SigmaHS[goodS]/SigmaPS[goodS],levels=sigplevels,cmap=cmapper,extend='both')
 
-        _ = self._make_figtitle(fig)
-
         # colorbar
         paxh_c.contourf(np.vstack((np.zeros_like(sighlevels), np.ones_like(sighlevels))), 
                        np.vstack((sighlevels, sighlevels)), 
@@ -2295,6 +2293,8 @@ class SWIPE(object):
             pax_c.yaxis.tick_right()
 
         plt.subplots_adjust(hspace = 0.1, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
+
+        _ = self._make_figtitle(fig)
 
         plt.show()
 
