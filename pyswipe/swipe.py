@@ -2673,7 +2673,7 @@ class SWIPE(object):
         y = 0.07
         size = 12
         ha = 'left'
-        title = fig.text(x,y, strr, ha=ha, size=size,fontdict={'family':'monospace'})
+        title = fig.text(x,y, strr, ha=ha, size=size)#,fontdict={'family':'monospace'})
 
 
         return title
