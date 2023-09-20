@@ -1660,9 +1660,11 @@ class SWIPE(object):
         #               'AL: \t${AL_s:+}$ nT\nAU: \t${AU_s:+}$ nT\n $\int j_{uparrow:}$:\t ${js_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${js_down:+.1f}$ MA'.format(AL_s = int(np.round(AL_s)), AU_s = int(np.round(AU_s)), js_up = ju_s, js_down = jd_s, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-        plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (pax_n, pax_s, pax_c)
 
     def plot_Pedersen(self,
@@ -1775,9 +1777,11 @@ class SWIPE(object):
         #               'AL: \t${AL_s:+}$ nT\nAU: \t${AU_s:+}$ nT\n $\int j_{uparrow:}$:\t ${js_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${js_down:+.1f}$ MA'.format(AL_s = int(np.round(AL_s)), AU_s = int(np.round(AU_s)), js_up = ju_s, js_down = jd_s, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-        plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (pax_n, pax_s, pax_c)
 
 
@@ -1883,9 +1887,11 @@ class SWIPE(object):
         pax_c.yaxis.tick_right()
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-        plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (pax_n, pax_s, pax_c)
 
 
@@ -2061,9 +2067,11 @@ class SWIPE(object):
             pax_c.yaxis.tick_right()
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-        plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (paxh_n, paxh_s, paxh_c, paxp_n, paxp_s, paxp_c)
 
 
@@ -2285,9 +2293,11 @@ class SWIPE(object):
             pax_c.yaxis.tick_right()
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-        plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (paxh_n, paxh_s, paxh_c, paxp_n, paxp_s, paxp_c)
 
 
@@ -2430,9 +2440,11 @@ class SWIPE(object):
 
         if (axN is None) or (axS is None) or (cax is None):
             plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-            plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (pax_n, pax_s, pax_c)
 
 
@@ -2638,9 +2650,11 @@ class SWIPE(object):
 
         if (axN is None) or (axS is None) or (cax is None):
             plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
-            plt.show()
 
         _ = self._make_figtitle(fig)
+
+        plt.show()
+
         return fig, (pax_n, pax_s, pax_c)
 
 
@@ -2673,7 +2687,7 @@ class SWIPE(object):
         y = 0.07
         size = 12
         ha = 'left'
-        title = fig.text(x,y, strr, ha=ha, size=size)#,fontdict={'family':'monospace'})
+        title = fig.text(x,y, strr, ha=ha, size=size,fontdict={'family':'monospace'})
 
 
         return title
