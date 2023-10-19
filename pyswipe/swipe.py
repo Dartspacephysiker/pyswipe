@@ -40,8 +40,9 @@ from matplotlib import rc
 # from pyswipe.plot_utils import equal_area_grid, Polarsubplot, get_h2d_bin_areas
 from pyswipe.plot_utils import equal_area_grid, Polarplot, get_h2d_bin_areas
 from .sh_utils import legendre, get_R_arrays, get_R_arrays__symm, get_A_matrix__Ephizero, get_A_matrix__potzero, SHkeys 
-from .model_utils import get_model_vectors, get_coeffs, default_coeff_fn, get_truncation_levels
+from .model_utils import get_model_vectors, get_coeffs, default_coeff_fn, get_truncation_levels, get_apex_base_vectors
 from .mlt_utils import mlt_to_mlon
+from .constants import MU0,REFRE,d2r
 import ppigrf
 import apexpy
 from datetime import datetime
@@ -53,9 +54,6 @@ import warnings
 
 rc('text', usetex=False)
 
-MU0   = 4*np.pi*1e-7 # Permeability constant
-REFRE = 6371.2 # Reference radius used in geomagnetic modeling
-d2r = np.pi/180
 
 # DEFAULT = object()
 
@@ -1335,14 +1333,16 @@ class SWIPE(object):
                           apex_refdate=datetime(2020,1,1),
                           apex_refheight=110,
                           grid = False,
-                          killpoloidalB=False):
+                          killpoloidalB=True):
         """ 
         Calculate the Poynting flux, in mW/m^2, along Modified Apex basevectors e1, e2, and e3 at one point in time.
         The calculations refer to the height chosen upon initialization of the SWIPE 
         object (default 110 km). 
         2021/11/24
 
-        killpoloidalB added because the divergence of Poynting flux given by an E-field and a B-field that are represented by gradients of scalar potentials is zero. Thus the contribution to the divergence of Poynting flux from poloidal ΔB perturbations (at least when ΔB^pol = - grad(V) with V a scalar) is zero.
+        killpoloidalB added because the divergence of Poynting flux given by an E-field and a B-field that are represented by gradients of scalar potentials is zero. 
+        Thus the contribution to the divergence of Poynting flux from poloidal ΔB perturbations (at least when ΔB^pol = - grad(V) with V a scalar) is zero.
+        In other words: only use killpoloidalB==False if you understand that the addition it provides to the Poynting flux does NOT contribute to Joule heating in the ionosphere!
 
         Parameters
         ----------
@@ -1481,6 +1481,122 @@ class SWIPE(object):
         
         return pfluxe1,pfluxe2,pfluxpar
 
+
+    def get_poynting_flux_dipole(self, mlat = None, mlt = None,
+                                 heights = None,
+                                 grid = False,
+                                 killpoloidalB=True):
+        """ 
+        Calculate the field-aligned (earthward positive) Poynting flux, in mW/m^2, by translating Earth's magnetic field to a dipole.
+        The calculations refer to the height chosen upon initialization of the SWIPE 
+        object (default 110 km). 
+        2023/10/19
+
+        killpoloidalB added because the divergence of Poynting flux given by an E-field and a B-field that are represented by gradients of scalar potentials is zero. 
+        Thus the contribution to the divergence of Poynting flux from poloidal ΔB perturbations (at least when ΔB^pol = - grad(V) with V a scalar) is zero.
+        In other words: only use killpoloidalB==False if you understand that the addition it provides to the Poynting flux does NOT contribute to Joule heating in the ionosphere!
+
+        Parameters
+        ----------
+        mlat : numpy.ndarray, optional
+            array of mlats at which to calculate the current. Will be ignored if mlt is not also specified. If 
+            not specified, the calculations will be done using the coords of the `vectorgrid` attribute.
+        mlt : numpy.ndarray, optional
+            array of mlts at which to calculate the current. Will be ignored if mlat is not also specified. If 
+            not specified, the calculations will be done using the coords of the `vectorgrid` attribute.
+        grid : bool, optional, default False
+            if True, mlat and mlt are interpreted as coordinates in a regular grid. They must be 
+            1-dimensional, and the output will have dimensions len(mlat) x len(mlt). If mlat and mlt 
+            are not set, this keyword is ignored.
+
+
+        Return
+        ------
+        pfluxe1 : numpy.ndarray, float
+            Component of the Poynting flux along MA(110) base vector e1, which is "more-or-less in the magnetic eastward direction" (Just below Eq. 3.18 in Richmond, 1995)
+        pfluxe2 : numpy.ndarray, float
+            Component of the electric field along MA(110) base vector e2, which is "generally downward and/or equatorward" (Just below Eq. 3.18 in Richmond, 1995)
+        pfluxpar : numpy.ndarray, float
+            Component of the electric field along MA(110) base vector e3, which is (I believe?) along the main geomagnetic field
+
+        See Also
+        --------
+        """
+
+        # Get mlat, mlt for AMPS
+        if mlat is None or mlt is None:
+            mlat, mlt = self.vectorgrid
+            sinI = self.sinI_vector.copy().ravel()
+            mlat,mlt = mlat.ravel(),mlt.ravel()
+
+        else:
+            mlat,mlt = mlat.ravel(),mlt.ravel()
+            sinI = 2 * np.sin(mlat * d2r)/np.sqrt(4-3*np.cos(mlat * d2r)**2)
+
+        if heights is None:
+            map_Efield = False
+            heights = np.array([self.height]*len(mlat))
+        else:
+            map_Efield = True
+
+        assert not map_Efield,"Have not implemented mapping of E-field!"
+
+
+        ####################
+        # Get E-field
+        Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid)
+
+        # Use Emphi and Emlambda as approximations when assuming apex coordinates are orthogonal spherical coordinates (see Eqs 5.9 and 5.10 in Richmond, 1995)
+        # OLD, WRONG
+        # Emphi = Ed1             # eastward component
+        # Emlambda = -Ed2 * sinI  # northward component, trur eg
+        # Emphi, Emlambda = np.vstack([Emphi,Emlambda])/1e3  # convert from mV/m  to V/m
+
+        # NEW
+        Ed1, Ed2 = np.vstack([Ed1,Ed2])/1e3  # convert from mV/m  to V/m
+
+        ####################
+        # Get ΔB perturbations
+
+        # Initialize amps
+        from pyamps import amps
+
+        Be, Bn, Bu = amps.get_B_space_dipole(mlat, mlt, heights.ravel(),
+                                             np.array([self.inputs['v'   ]]*len(mlat)),
+                                             np.array([self.inputs['By'  ]]*len(mlat)),
+                                             np.array([self.inputs['Bz'  ]]*len(mlat)),
+                                             np.array([self.inputs['tilt']]*len(mlat)),
+                                             np.array([self.inputs['f107']]*len(mlat)),
+                                             killpoloidal=killpoloidalB)
+
+        # OLD
+        # Be, Bn, Bu = np.vstack([Be,Bn,Bu])/1e9            # convert from nT to T
+
+        # NEW
+        Bvec = np.vstack([Be,Bn,Bu])/1e9            # convert from nT to T
+
+        d1, d2, d3, e1, e2, e3 = get_apex_base_vectors(mlat, heights.ravel(), h_R=110.)
+
+        Bd1 = np.sum(Bvec*e1,axis=0)
+        Bd2 = np.sum(Bvec*e2,axis=0)
+
+        ####################
+        # Calculate Poynting flux
+        
+        # OLD
+        # return (Emphi * Bn - Emlambda * Be)/MU0*1e3 # convert from W/m^2 to mW/m^2
+
+        # NEW
+        Pe3 = (Ed1 * Bd2 - Ed2 * Bd1)/MU0*1e3  # Equation 4.21 in Richmond (1995)
+        # If height == self.height, then
+        # e3 . bhat = 1, and
+        # P = Pe3 e3 . bhat = Pe3
+        # That is, Pe3 is the field-aligned Poynting flux at the Modified Apex reference altitude given by self.height
+
+        # Want earthward Poynting flux
+        sign = np.ones_like(Pe3)
+        sign[mlat < 0] = -1
+        return sign*Pe3
 
     def plot_potential(self,
                        convection=False,
@@ -2449,11 +2565,6 @@ class SWIPE(object):
 
 
     def plot_pflux(self,
-                   height=None,
-                   showhoriz=False,
-                   showabs=False,
-                   onlyshowdownward=True,
-                   vector_scale=None,
                    flip_panel_order=False,
                    vmin=None,
                    vmax=None,
@@ -2464,40 +2575,35 @@ class SWIPE(object):
                    cax_opts=dict(),
                    suppress_labels=False):
         """ 
-        Create a summary plot of the Poyntingflux
+        Create a summary plot of the downward Poynting flux by translating Earth's magnetic field to a dipole.
 
         Parameters
         ----------
-        height           : float (default self.height, which should be 110 km)
-        showhoriz        : boolean (default False)
-            Show horizontal components of Poynting flux (in mW/m^2) 
-        showabs          : boolean (default False)
-            Show absolute value of field-aligned component of Poynting flux (in mW/m^2) 
-        onlyshowdownward : boolean (default True)
-            Show absolute value of field-aligned component of Poynting flux (in mW/m^2) 
-        
-        vector_scale : optional
-            Vector lengths will be shown relative to a template. This parameter determines
-            the magnitude of that template, in mW/m^2. Default is 1 mW/m^2
 
         Examples
         --------
         >>> # initialize by supplying a set of external conditions:
         >>> m = SWIPE(300, # solar wind velocity in km/s 
-                      -4, # IMF By in nT
-                      -3, # IMF Bz in nT
-                      20, # dipole tilt angle in degrees
-                      150) # F10.7 index in s.f.u.
+                     -4, # IMF By in nT
+                     -3, # IMF Bz in nT
+                     20, # dipole tilt angle in degrees
+                     150) # F10.7 index in s.f.u.
         >>> # make summary plot:
         >>> m.plot_pflux()
 
         """
 
-        assert 2<0,"SWIPE.plot_pflux() is not in working order, sorry!"
+        # Want the vector grid? Uncomment here
+        # mlatv, mltv = self.plotgrid_vector
+        # mlat,mlt = mlatv,mltv
+        # SigmaP = self.get_pedersen_conductance()
 
-        # get the grids:
-        mlats, mlts = self.plotgrid_scalar
-        mlatv, mltv = self.plotgrid_vector
+        # Want the scalar grid? Uncomment here
+        mlat,mlt = self.scalargrid
+        mlat,mlt = mlat.ravel(),mlt.ravel()
+        PF = self.get_poynting_flux_dipole(mlat,mlt)
+
+        PFN,PFS = np.split(PF,2)
 
         # set up figure and polar coordinate plots:
         fig = None
@@ -2515,7 +2621,8 @@ class SWIPE(object):
             pax_n = Polarplot(axN, **self.pax_plotopts)
             pax_s = Polarplot(axS, **self.pax_plotopts)
             pax_c = cax
-
+            
+        
         # labels
         pax_n.writeLTlabels(lat = self.minlat, size = 14)
         pax_s.writeLTlabels(lat = self.minlat, size = 14)
@@ -2527,103 +2634,48 @@ class SWIPE(object):
             self._make_pax_n_label(pax_n)
             self._make_pax_s_label(pax_s)
 
-        if height is not None:
-            heights_scalar = np.ones(shape=np.vstack([mlats,-mlats]).shape)*height
-            heights_vector = np.array([height]*len(self.vectorgrid[0]))
-        else:
-            heights_scalar = np.ones(shape=np.vstack([mlats,-mlats]).shape)*self.height
-            heights_vector = np.array([self.height]*len(self.vectorgrid[0]))
-    
-
-        ####################
-        # Get Poynting flux components
-        # # OLD
-        # pfluxe1,pfluxe2,pfluxpar = self.get_Poynting_flux__grid()
-
-        # NEW, let pfluxpar be scalargrid
-        pfluxe1,pfluxe2,_ = self.get_Poynting_flux__grid(heights=heights_vector)
-        # _,_,pfluxpar = self.get_Poynting_flux__grid(mlats,mlts)
-        _,_,pfluxpar = self.get_Poynting_flux__grid(np.vstack([mlats,-mlats]),np.vstack([mlts,mlts]),
-                                                    heights=heights_scalar)
-
-        # Horizontal Poynting flux components
-        if showhoriz:
-            if vector_scale is None:
-                vector_scale = 1  # mW/m^2
-            pfluxe1NH, pfluxe1SH = np.split(pfluxe1, 2)
-            pfluxe2NH, pfluxe2SH = np.split(pfluxe2, 2)
-
-            pax_n.plotpins(mlatv, mltv, -pfluxe2NH, pfluxe1NH, SCALE = vector_scale, markersize = 10, unit = 'mW/m^2', linewidth = .5, color = 'gray', markercolor = 'grey')
-            pax_s.plotpins(mlatv, mltv, -pfluxe2SH, pfluxe1SH, SCALE = vector_scale, markersize = 10, unit = None  , linewidth = .5, color = 'gray', markercolor = 'grey')
-
-        # Parallel Poynting flux
-        pfluxparn, pfluxpars = np.split(pfluxpar, 2)
-
-        if showabs:
-            pfluxparn = np.abs(pfluxparn)
-            pfluxpars = np.abs(pfluxpars)
-            cmapper = plt.cm.magma
-        elif onlyshowdownward:
-            pfluxpars = (-1)*pfluxpars
-            pfluxparn[pfluxparn < 0] = 0
-            pfluxpars[pfluxpars < 0] = 0
-            cmapper = plt.cm.magma
-        else:
-            cmapper = plt.cm.bwr             
-
-        if cmap is not None:
-            cmapper = cmap
-
+        # if vector_scale is None:
+        #     vector_scale = 20  # mV/m
+        # siglevels = np.linspace(PF.min(),PF.max(),31)
+        # siglevels = np.linspace(np.quantile(PF,0.01),np.quantile(PF,0.99),31)
+        # siglevels = np.linspace(np.clip(np.quantile(PF,0.01),-0.5,0),np.quantile(PF,0.975),31)
 
         if vmin is None:
-            fluxmin = np.min([np.quantile(pfluxparn,0.01),np.quantile(pfluxpars,0.01)])
+            sigmin = np.clip(np.quantile(PF,0.01),-0.5,0)
         else:
-            fluxmin = vmin
+            sigmin = vmin
 
         if vmax is None:
-            fluxmax = np.max([np.quantile(pfluxparn,0.975),np.quantile(pfluxpars,0.975)])
+            sigmax = np.quantile(PF,0.975)
         else:
-            fluxmax = vmax
+            sigmax = vmax
 
-        siglevels = np.linspace(fluxmin,fluxmax,31)
+        siglevels = np.linspace(sigmin,sigmax,31)
 
-        # fluxlevelscoarse = np.r_[fluxmin:fluxmax:1] #We don't show coarse anymo'
-        # fluxlevels = np.r_[fluxmin:fluxmax:.05]
-        fluxlevels = np.linspace(fluxmin,fluxmax,31)
-
-        pax_n.contourf(mlats, mlts, pfluxparn, levels = fluxlevels, cmap = cmapper, extend = 'both')
-        pax_s.contourf(mlats, mlts, pfluxpars, levels = fluxlevels, cmap = cmapper, extend = 'both')
-
-        # opts__contour = dict(levels = fluxlevelscoarse, linestyles='solid', colors='black', linewidths=1)
-        # pax_n.contour(mlats, mlts, pfluxparn, **opts__contour)
-        # pax_s.contour(mlats, mlts, pfluxpars, **opts__contour)
-
-        # #We don't show coarse anymo'
-        # opts__contour = dict(levels = fluxlevelscoarse, linestyles='solid', colors='black', linewidths=1)
-        # pax_n.contour(mlats, mlts, pfluxparn, **opts__contour)
-        # pax_s.contour(mlats, mlts, pfluxpars, **opts__contour)
-
-        # dPfluxparN = pfluxparn.max()-pfluxparn.min()
-        # dPfluxparS = pfluxpars.max()-pfluxpars.min()
-        # pax_n.write(self.minlat-6, 2, r'$\Delta \Pfluxpar = $'+f"{dPfluxparN:.1f} kV" ,ha='center',va='center',size=18)
-        # pax_s.write(self.minlat-6, 2, r'$\Delta \Pfluxpar = $'+f"{dPfluxparS:.1f} kV" ,ha='center',va='center',size=18)
-
-        minn,maxn = np.argmin(pfluxparn),np.argmax(pfluxparn)
-        mins,maxs = np.argmin(pfluxpars),np.argmax(pfluxpars)
-        
-        # pax_n.write(mlats.flatten()[minn],mlts.flatten()[minn],r'x',ha='center',va='center',size=18)
-        # pax_n.write(mlats.flatten()[maxn],mlts.flatten()[maxn],r'+',ha='center',va='center',size=18)
-
-        # pax_s.write(mlats.flatten()[mins],mlts.flatten()[mins],r'x',ha='center',va='center',size=18)
-        # pax_s.write(mlats.flatten()[maxs],mlts.flatten()[maxs],r'+',ha='center',va='center',size=18)
+        if cmap is None:
+            cmapper = plt.cm.magma
+        else:
+            cmapper = cmap
+        # cmapper = plt.cm.bwr
+        # pax_n.contourf(mlatv, mltv, np.abs(PFN),levels=siglevels,cmap=cmapper,extend='both')
+        # pax_s.contourf(mlatv, mltv, np.abs(PFS),levels=siglevels,cmap=cmapper,extend='both')
+        if np.isclose(mlat.size/PFN.size,2):
+            pax_n.contourf(np.split(mlat,2)[0],np.split(mlt,2)[0],PFN,
+                           levels=siglevels,cmap=cmapper,extend='both')
+            pax_s.contourf(np.split(mlat,2)[0],np.split(mlt,2)[0],PFS,
+                           levels=siglevels,cmap=cmapper,extend='both')
+        else:
+            pax_n.contourf(mlat, mlt, PFN,levels=siglevels,cmap=cmapper,extend='both')
+            pax_s.contourf(mlat, mlt, PFS,levels=siglevels,cmap=cmapper,extend='both')
 
         # colorbar
-        pax_c.contourf(np.vstack((np.zeros_like(fluxlevels), np.ones_like(fluxlevels))), 
-                       np.vstack((fluxlevels, fluxlevels)), 
-                       np.vstack((fluxlevels, fluxlevels)), 
-                       levels = fluxlevels, cmap = cmapper)
+        pax_c.contourf(np.vstack((np.zeros_like(siglevels), np.ones_like(siglevels))), 
+                       np.vstack((siglevels, siglevels)), 
+                       np.vstack((siglevels, siglevels)), 
+                       levels = siglevels, cmap = cmapper)
         pax_c.set_xticks([])
-        pax_c.set_ylabel(r'Poynting flux [mW/m$^2$]', size = 18)
+        # pax_c.set_ylabel(r'downward    $\mu$A/m$^2$      upward', size = 18)
+        pax_c.set_ylabel(r'$W_{EM}$ [mW/m$^2$]', size = 18)
         pax_c.yaxis.set_label_position("right")
         pax_c.yaxis.tick_right()
 
@@ -2641,12 +2693,13 @@ class SWIPE(object):
                                          **binareaopts)
 
             # Integrated power in GW
-            integN = np.sum((pfluxparn*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
-            integS = np.sum((pfluxpars*1e-3)*(binareas*1e6))/1e9
-            pax_n.write(self.minlat, 9, f"{integN:4.1f}",
+            integN = np.sum((PFN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
+            integS = np.sum((PFS*1e-3)*(binareas*1e6))/1e9
+            pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
-            pax_s.write(self.minlat, 9, f"{integS:4.1f}",
+            pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+
 
         if (axN is None) or (axS is None) or (cax is None):
             plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
@@ -2656,6 +2709,216 @@ class SWIPE(object):
         plt.show()
 
         return fig, (pax_n, pax_s, pax_c)
+
+
+    # def plot_pflux(self,
+    #                height=None,
+    #                showhoriz=False,
+    #                showabs=False,
+    #                onlyshowdownward=True,
+    #                vector_scale=None,
+    #                flip_panel_order=False,
+    #                vmin=None,
+    #                vmax=None,
+    #                cmap=None,
+    #                axN=None,
+    #                axS=None,
+    #                cax=None,
+    #                cax_opts=dict(),
+    #                suppress_labels=False):
+    #     """ 
+    #     Create a summary plot of the Poyntingflux
+
+    #     Parameters
+    #     ----------
+    #     height           : float (default self.height, which should be 110 km)
+    #     showhoriz        : boolean (default False)
+    #         Show horizontal components of Poynting flux (in mW/m^2) 
+    #     showabs          : boolean (default False)
+    #         Show absolute value of field-aligned component of Poynting flux (in mW/m^2) 
+    #     onlyshowdownward : boolean (default True)
+    #         Show absolute value of field-aligned component of Poynting flux (in mW/m^2) 
+        
+    #     vector_scale : optional
+    #         Vector lengths will be shown relative to a template. This parameter determines
+    #         the magnitude of that template, in mW/m^2. Default is 1 mW/m^2
+
+    #     Examples
+    #     --------
+    #     >>> # initialize by supplying a set of external conditions:
+    #     >>> m = SWIPE(300, # solar wind velocity in km/s 
+    #                   -4, # IMF By in nT
+    #                   -3, # IMF Bz in nT
+    #                   20, # dipole tilt angle in degrees
+    #                   150) # F10.7 index in s.f.u.
+    #     >>> # make summary plot:
+    #     >>> m.plot_pflux()
+
+    #     """
+
+    #     assert 2<0,"SWIPE.plot_pflux() is not in working order, sorry!"
+
+    #     # get the grids:
+    #     mlats, mlts = self.plotgrid_scalar
+    #     mlatv, mltv = self.plotgrid_vector
+
+    #     # set up figure and polar coordinate plots:
+    #     fig = None
+    #     if (axN is None) or (axS is None) or (cax is None):
+            
+    #         fig = plt.figure(figsize = (15, 7))
+    #         if flip_panel_order:
+    #             pax_s = Polarplot(plt.subplot2grid((1, 15), (0,  0), colspan = 7), **self.pax_plotopts)
+    #             pax_n = Polarplot(plt.subplot2grid((1, 15), (0,  7), colspan = 7), **self.pax_plotopts)
+    #         else:
+    #             pax_n = Polarplot(plt.subplot2grid((1, 15), (0,  0), colspan = 7), **self.pax_plotopts)
+    #             pax_s = Polarplot(plt.subplot2grid((1, 15), (0,  7), colspan = 7), **self.pax_plotopts)
+    #         pax_c = plt.subplot2grid((1, 150), (0, 149), colspan = 1)
+    #     else:
+    #         pax_n = Polarplot(axN, **self.pax_plotopts)
+    #         pax_s = Polarplot(axS, **self.pax_plotopts)
+    #         pax_c = cax
+
+    #     # labels
+    #     pax_n.writeLTlabels(lat = self.minlat, size = 14)
+    #     pax_s.writeLTlabels(lat = self.minlat, size = 14)
+    #     pax_n.write(self.minlat, 3,    str(self.minlat) + r'$^\circ$' ,
+    #                 ha = 'left', va = 'top', size = 14, ignore_plot_limits=True)
+    #     pax_s.write(self.minlat, 3,    r'$-$' + str(self.minlat) + '$^\circ$',
+    #                 ha = 'left', va = 'top', size = 14, ignore_plot_limits=True)
+    #     if not suppress_labels:
+    #         self._make_pax_n_label(pax_n)
+    #         self._make_pax_s_label(pax_s)
+
+    #     if height is not None:
+    #         heights_scalar = np.ones(shape=np.vstack([mlats,-mlats]).shape)*height
+    #         heights_vector = np.array([height]*len(self.vectorgrid[0]))
+    #     else:
+    #         heights_scalar = np.ones(shape=np.vstack([mlats,-mlats]).shape)*self.height
+    #         heights_vector = np.array([self.height]*len(self.vectorgrid[0]))
+    
+
+    #     ####################
+    #     # Get Poynting flux components
+    #     # # OLD
+    #     # pfluxe1,pfluxe2,pfluxpar = self.get_Poynting_flux__grid()
+
+    #     # NEW, let pfluxpar be scalargrid
+    #     pfluxe1,pfluxe2,_ = self.get_Poynting_flux__grid(heights=heights_vector)
+    #     # _,_,pfluxpar = self.get_Poynting_flux__grid(mlats,mlts)
+    #     _,_,pfluxpar = self.get_Poynting_flux__grid(np.vstack([mlats,-mlats]),np.vstack([mlts,mlts]),
+    #                                                 heights=heights_scalar)
+
+    #     # Horizontal Poynting flux components
+    #     if showhoriz:
+    #         if vector_scale is None:
+    #             vector_scale = 1  # mW/m^2
+    #         pfluxe1NH, pfluxe1SH = np.split(pfluxe1, 2)
+    #         pfluxe2NH, pfluxe2SH = np.split(pfluxe2, 2)
+
+    #         pax_n.plotpins(mlatv, mltv, -pfluxe2NH, pfluxe1NH, SCALE = vector_scale, markersize = 10, unit = 'mW/m^2', linewidth = .5, color = 'gray', markercolor = 'grey')
+    #         pax_s.plotpins(mlatv, mltv, -pfluxe2SH, pfluxe1SH, SCALE = vector_scale, markersize = 10, unit = None  , linewidth = .5, color = 'gray', markercolor = 'grey')
+
+    #     # Parallel Poynting flux
+    #     pfluxparn, pfluxpars = np.split(pfluxpar, 2)
+
+    #     if showabs:
+    #         pfluxparn = np.abs(pfluxparn)
+    #         pfluxpars = np.abs(pfluxpars)
+    #         cmapper = plt.cm.magma
+    #     elif onlyshowdownward:
+    #         pfluxpars = (-1)*pfluxpars
+    #         pfluxparn[pfluxparn < 0] = 0
+    #         pfluxpars[pfluxpars < 0] = 0
+    #         cmapper = plt.cm.magma
+    #     else:
+    #         cmapper = plt.cm.bwr             
+
+    #     if cmap is not None:
+    #         cmapper = cmap
+
+
+    #     if vmin is None:
+    #         fluxmin = np.min([np.quantile(pfluxparn,0.01),np.quantile(pfluxpars,0.01)])
+    #     else:
+    #         fluxmin = vmin
+
+    #     if vmax is None:
+    #         fluxmax = np.max([np.quantile(pfluxparn,0.975),np.quantile(pfluxpars,0.975)])
+    #     else:
+    #         fluxmax = vmax
+
+    #     siglevels = np.linspace(fluxmin,fluxmax,31)
+
+    #     # fluxlevelscoarse = np.r_[fluxmin:fluxmax:1] #We don't show coarse anymo'
+    #     # fluxlevels = np.r_[fluxmin:fluxmax:.05]
+    #     fluxlevels = np.linspace(fluxmin,fluxmax,31)
+
+    #     pax_n.contourf(mlats, mlts, pfluxparn, levels = fluxlevels, cmap = cmapper, extend = 'both')
+    #     pax_s.contourf(mlats, mlts, pfluxpars, levels = fluxlevels, cmap = cmapper, extend = 'both')
+
+    #     # opts__contour = dict(levels = fluxlevelscoarse, linestyles='solid', colors='black', linewidths=1)
+    #     # pax_n.contour(mlats, mlts, pfluxparn, **opts__contour)
+    #     # pax_s.contour(mlats, mlts, pfluxpars, **opts__contour)
+
+    #     # #We don't show coarse anymo'
+    #     # opts__contour = dict(levels = fluxlevelscoarse, linestyles='solid', colors='black', linewidths=1)
+    #     # pax_n.contour(mlats, mlts, pfluxparn, **opts__contour)
+    #     # pax_s.contour(mlats, mlts, pfluxpars, **opts__contour)
+
+    #     # dPfluxparN = pfluxparn.max()-pfluxparn.min()
+    #     # dPfluxparS = pfluxpars.max()-pfluxpars.min()
+    #     # pax_n.write(self.minlat-6, 2, r'$\Delta \Pfluxpar = $'+f"{dPfluxparN:.1f} kV" ,ha='center',va='center',size=18)
+    #     # pax_s.write(self.minlat-6, 2, r'$\Delta \Pfluxpar = $'+f"{dPfluxparS:.1f} kV" ,ha='center',va='center',size=18)
+
+    #     minn,maxn = np.argmin(pfluxparn),np.argmax(pfluxparn)
+    #     mins,maxs = np.argmin(pfluxpars),np.argmax(pfluxpars)
+        
+    #     # pax_n.write(mlats.flatten()[minn],mlts.flatten()[minn],r'x',ha='center',va='center',size=18)
+    #     # pax_n.write(mlats.flatten()[maxn],mlts.flatten()[maxn],r'+',ha='center',va='center',size=18)
+
+    #     # pax_s.write(mlats.flatten()[mins],mlts.flatten()[mins],r'x',ha='center',va='center',size=18)
+    #     # pax_s.write(mlats.flatten()[maxs],mlts.flatten()[maxs],r'+',ha='center',va='center',size=18)
+
+    #     # colorbar
+    #     pax_c.contourf(np.vstack((np.zeros_like(fluxlevels), np.ones_like(fluxlevels))), 
+    #                    np.vstack((fluxlevels, fluxlevels)), 
+    #                    np.vstack((fluxlevels, fluxlevels)), 
+    #                    levels = fluxlevels, cmap = cmapper)
+    #     pax_c.set_xticks([])
+    #     pax_c.set_ylabel(r'Poynting flux [mW/m$^2$]', size = 18)
+    #     pax_c.yaxis.set_label_position("right")
+    #     pax_c.yaxis.tick_right()
+
+    #     # Add integrated power
+    #     addintegpower = True
+    #     if addintegpower:
+    #         mlatmin,mlatmax,mltmin,mltmax = self.get_grid_binedges(gridtype='scalar')
+            
+    #         binareaopts = dict(haversine=True,
+    #                            spherical_rectangle=True,
+    #                            do_extra_width_calc=True,
+    #                            altitude=110)
+            
+    #         binareas = get_h2d_bin_areas(mlatmin, mlatmax, mltmin*15, mltmax*15,
+    #                                      **binareaopts)
+
+    #         # Integrated power in GW
+    #         integN = np.sum((pfluxparn*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
+    #         integS = np.sum((pfluxpars*1e-3)*(binareas*1e6))/1e9
+    #         pax_n.write(self.minlat, 9, f"{integN:4.1f}",
+    #                     ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+    #         pax_s.write(self.minlat, 9, f"{integS:4.1f}",
+    #                     ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+
+    #     if (axN is None) or (axS is None) or (cax is None):
+    #         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
+
+    #     _ = self._make_figtitle(fig)
+
+    #     plt.show()
+
+    #     return fig, (pax_n, pax_s, pax_c)
 
 
     def _make_pax_n_label(self,pax_n):
