@@ -1,7 +1,5 @@
 Overview
 ========
-..
-  _|docs| |version| |doi|
 
 Python interface for the Swarm Ionospheric Polar Electrodynamics (SWIPE) model.
 
@@ -87,34 +85,3 @@ Acknowledgments
 The code is produced with support from ESA through the Swarm Data Innovation and Science Cluster (Swarm DISC). For more information on Swarm DISC, please visit https://earth.esa.int/web/guest/missions/esa-eo-missions/swarm/disc
 
 
-Badges
-------
-
-.. list-table::
-    :stub-columns: 1
-
-    * - docs
-      - |docs|
-    * - tests
-      - |requires| 
-    * - package
-      - | |version|
-
-.. |docs| image:: https://readthedocs.org/projects/pyswipe/badge/?version=latest
-    :target: http://pyswipe.readthedocs.io/en/latest/?badge=latest
-    :alt: Documentation Status
-
-.. |version| image:: https://badge.fury.io/py/pyswipe.svg
-    :alt: PyPI Package latest release
-    :target: https://badge.fury.io/py/pyswipe
-
-.. |coveralls| image:: https://coveralls.io/repos/github/dartspacephysiker/pyswipe/badge.svg
-    :target: https://coveralls.io/github/dartspacephysiker/pyswipe
-    :alt: Coverage Status
-
-.. |requires| image:: https://requires.io/github/dartspacephysiker/pyswipe/requirements.svg?branch=master
-    :target: https://requires.io/github/dartspacephysiker/pyswipe/requirements/?branch=master
-    :alt: Requirements Status
-
-.. |doi| image:: https://zenodo.org/badge/DOI/
-    :target: https://doi.org/
