@@ -1,6 +1,7 @@
 Overview
 ========
-|docs| |version| |doi|
+..
+  _|docs| |version| |doi|
 
 Python interface for the Swarm Ionospheric Polar Electrodynamics (SWIPE) model.
 
