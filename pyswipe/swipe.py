@@ -65,7 +65,7 @@ DEFAULT_MAX_HALL = 100.         # mho
 
 class SWIPE(object):
     """
-    Calculate and plot maps of the Swarm HEmispherically resolved Ionospheric Convection (SWIPE) model
+    Calculate and plot maps of the Swarm Ionospheric Polar Electrodynamics (SWIPE) model
 
     Parameters
     ---------
