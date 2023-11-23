@@ -171,6 +171,9 @@ class SWIPE(object):
         """ __init__ function for class SWIPE
         """
 
+        if minlat < 47:
+            warnings.warn(f"Selected minlat(={minlat}) is below recommended lowest acceptable value, 47°. This will probably affect, for example, calculations of cross-polar cap potential.")
+
         if coeff_fn is None:
             # if use_transpose_coeff_fn:
             #     coeff_fn = default_transpose_coeff_fn
@@ -1598,6 +1601,44 @@ class SWIPE(object):
         sign[mlat < 0] = -1
         return sign*Pe3
 
+
+    def get_integ_power(self,JH=None):
+        """
+        Integrate electromagnetic work over entire high-latitude area in each hemisphere
+
+        JH, if not "None", should be an array of the same shape as what is provided
+        by SWIPE.get_emwork()
+        """
+
+        if JH is None:
+            
+            mlat,mlt = self.scalargrid
+            mlat,mlt = mlat.ravel(),mlt.ravel()
+            JH = self.get_emwork(mlat,mlt)
+
+            JHN,JHS = np.split(JH,2)
+
+        else:
+            
+            JHN,JHS = np.split(JH,2)
+
+        mlatmin,mlatmax,mltmin,mltmax = self.get_grid_binedges(gridtype='scalar')
+
+        binareaopts = dict(haversine=True,
+                           spherical_rectangle=True,
+                           do_extra_width_calc=True,
+                           altitude=110)
+            
+        binareas = get_h2d_bin_areas(mlatmin, mlatmax, mltmin*15, mltmax*15,
+                                     **binareaopts)
+
+        # Integrated power in GW
+        integN = np.sum((JHN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
+        integS = np.sum((JHS*1e-3)*(binareas*1e6))/1e9
+
+        return integN, integS
+
+
     def plot_potential(self,
                        convection=False,
                        vector_scale=None,
@@ -2535,19 +2576,8 @@ class SWIPE(object):
         # Add integrated power
         addintegpower = True
         if addintegpower:
-            mlatmin,mlatmax,mltmin,mltmax = self.get_grid_binedges(gridtype='scalar')
-            
-            binareaopts = dict(haversine=True,
-                               spherical_rectangle=True,
-                               do_extra_width_calc=True,
-                               altitude=110)
-            
-            binareas = get_h2d_bin_areas(mlatmin, mlatmax, mltmin*15, mltmax*15,
-                                         **binareaopts)
+            integN, integS = self.get_integ_power(JH=JH)
 
-            # Integrated power in GW
-            integN = np.sum((JHN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
-            integS = np.sum((JHS*1e-3)*(binareas*1e6))/1e9
             pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
             pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
@@ -2682,19 +2712,8 @@ class SWIPE(object):
         # Add integrated power
         addintegpower = True
         if addintegpower:
-            mlatmin,mlatmax,mltmin,mltmax = self.get_grid_binedges(gridtype='scalar')
-            
-            binareaopts = dict(haversine=True,
-                               spherical_rectangle=True,
-                               do_extra_width_calc=True,
-                               altitude=110)
-            
-            binareas = get_h2d_bin_areas(mlatmin, mlatmax, mltmin*15, mltmax*15,
-                                         **binareaopts)
+            integN, integS = self.get_integ_power(JH=PF)
 
-            # Integrated power in GW
-            integN = np.sum((PFN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
-            integS = np.sum((PFS*1e-3)*(binareas*1e6))/1e9
             pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
                         ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
             pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
