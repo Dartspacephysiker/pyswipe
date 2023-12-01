@@ -1,3 +1,5 @@
+|DOI| 
+
 Overview
 ========
 
@@ -85,3 +87,5 @@ Acknowledgments
 The code is produced with support from ESA through the Swarm Data Innovation and Science Cluster (Swarm DISC). For more information on Swarm DISC, please visit https://earth.esa.int/web/guest/missions/esa-eo-missions/swarm/disc
 
 
+.. |DOI| image:: https://zenodo.org/badge/685879333.svg
+        :target: https://zenodo.org/badge/latestdoi/685879333
