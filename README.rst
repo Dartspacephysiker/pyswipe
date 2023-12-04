@@ -7,10 +7,13 @@ Python interface for the Swarm Ionospheric Polar Electrodynamics (SWIPE) model.
 
 The SWIPE model is an empirical model of high-latitude ionospheric electrodynamics, and is a combination of the Average Magnetic field and Polar current System (AMPS) model and the Swarm High-latitude Convection (Swarm Hi-C) model.
 
-** AMPS
+AMPS
+-----------------------------------------------
+
 The AMPS model magnetic field and currents are continuous functions of solar wind velocity, the interplanetary magnetic field, the tilt of the Earth's dipole magnetic field with respect to the Sun, and the 10.7 cm solar radio flux index F10.7. Given these parameters, model values of the ionospheric magnetic field can be calculated anywhere in space, and, with certain assumptions, on ground. The full current system, horizontal + field-aligned, are defined everywhere in the polar regions. The model is based on magnetic field measurements from the low Earth orbiting Swarm and CHAMP satellites.
 
-** Swarm Hi-C
+Swarm Hi-C
+-----------------------------------------------
 The Swarm Hi-C model high-latitude ionospheric convection is a function of the same input parameters used for the AMPS model. Given these parameters, model values of the high-latitude ionospheric convection, potential, and electric field can be calculated. The model is based on ion drift measurements from Swarm A and Swarm C.
 
 pyswipe can be used to calculate and plot several different quantities on a grid. The parameters that are available for calculation/plotting are:
@@ -56,17 +59,8 @@ Quick Start
     >>> m.plot_potential()
 
 .. image:: docs/static/example_plot.png
-    :alt: Field-aligned (colour) and horizontal (pins) currents
+    :alt: Ionospheric potential (color) and electric field (pins)
     
-.. code-block:: python
-
-    >>> # All the different current functions can be calculated on
-    >>> # a pre-defined or user-specified grid.
-    >>> import numpy as np 
-    >>> mlat, mlt = np.array([75, -75]), np.array([12, 12])
-    >>> Ju = m.get_upward_current(mlat, mlt)
-    >>> Ju
-    array([ 0.23323377, -0.05599236])
 
 Documentation
 -------------
@@ -74,17 +68,18 @@ IF this were pyamps, we could point to `http://pyamps.readthedocs.io` . But it's
 
 References
 ----------
+Hatch, S. M., et al (in preparation), Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry?
+
 Laundal, K. M., Finlay, C. C., Olsen, N. & Reistad, J. P. (2018), Solar wind and seasonal influence on ionospheric currents from Swarm and CHAMP measurements, Journal of Geophysical Research - Space Physics. `doi:10.1029/2018JA025387 <https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2018JA025387>`_
-
-*pyAMPS uses an updated set of model coefficients compared to the model discussed in the paper. You can use pyAMPS and the scripts in pyamps/climatology_plots/ to produce updated versions of Figures 5-7 and 9-11 from the paper*
-
-See also:
-Laundal, K. M., Finlay, C. C. & Olsen, N. (2016), Sunlight effects on the 3D polar current system determined from low Earth orbit measurements. Earth Planets Space. `doi:10.1186/s40623-016-0518-x <https://earth-planets-space.springeropen.com/articles/10.1186/s40623-016-0518-x>`_ 
 
 
 Acknowledgments
 ---------------
-The code is produced with support from ESA through the Swarm Data Innovation and Science Cluster (Swarm DISC). For more information on Swarm DISC, please visit https://earth.esa.int/web/guest/missions/esa-eo-missions/swarm/disc
+The code is produced with support from ESA through the Swarm Data Innovation and Science Cluster (Swarm DISC). 
+
+For more information on the Swipe project, please visit https://earth.esa.int/eogateway/activities/swipe
+
+For more information on Swarm DISC, please visit https://earth.esa.int/web/guest/missions/esa-eo-missions/swarm/disc
 
 
 .. |DOI| image:: https://zenodo.org/badge/685879333.svg

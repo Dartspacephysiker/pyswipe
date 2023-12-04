@@ -15,4 +15,4 @@ __pycache__/
 .png
 .pdf
 
-pyswipe/tests/test*py
+pyswipe/spence_tests/test*py

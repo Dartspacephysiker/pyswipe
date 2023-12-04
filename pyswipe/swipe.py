@@ -939,13 +939,6 @@ class SWIPE(object):
         #         return ve1.reshape(shape), ve2.reshape(shape)
 
 
-    # def get_joule_dissipation(self, mlat = None, mlt = None, grid = False):
-    #     """
-    #     """
-    #     print("Aha! I don't think we can calculate Joule dissipation with AMPS and Swarm Hi-C. But we can calculate work. I'm redirecting your request to SWIPE.get_emwork()")
-    #     return self.get_emwork(mlat = mlat, mlt = mlt, grid = grid)
-
-
     def get_emwork(self, mlat = None, mlt = None, grid = False):
         """ 
         Calculate E&M work, in mW/m^2, from the Swarm Hi-C and AMPS models.
@@ -1807,14 +1800,6 @@ class SWIPE(object):
         pax_c.yaxis.set_label_position("right")
         pax_c.yaxis.tick_right()
 
-        # print AL index values and integrated up/down currents
-        # AL_n, AL_s, AU_n, AU_s = self.get_AE_indices()
-        # ju_n, jd_n, ju_s, jd_s = self.get_integrated_upward_current()
-
-        # pax_n.ax.text(pax_n.ax.get_xlim()[0], pax_n.ax.get_ylim()[0], 
-        #               'AL: \t${AL_n:+}$ nT\nAU: \t${AU_n:+}$ nT\n $\int j_{uparrow:}$:\t ${jn_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${jn_down:+.1f}$ MA'.format(AL_n = int(np.round(AL_n)), AU_n = int(np.round(AU_n)), jn_up = ju_n, jn_down = jd_n, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
-        # pax_s.ax.text(pax_s.ax.get_xlim()[0], pax_s.ax.get_ylim()[0], 
-        #               'AL: \t${AL_s:+}$ nT\nAU: \t${AU_s:+}$ nT\n $\int j_{uparrow:}$:\t ${js_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${js_down:+.1f}$ MA'.format(AL_s = int(np.round(AL_s)), AU_s = int(np.round(AU_s)), js_up = ju_s, js_down = jd_s, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
 
@@ -1923,15 +1908,6 @@ class SWIPE(object):
         pax_c.set_ylabel(r'$\Sigma_P$ [mho]', size = 18)
         pax_c.yaxis.set_label_position("right")
         pax_c.yaxis.tick_right()
-
-        # print AL index values and integrated up/down currents
-        # AL_n, AL_s, AU_n, AU_s = self.get_AE_indices()
-        # ju_n, jd_n, ju_s, jd_s = self.get_integrated_upward_current()
-
-        # pax_n.ax.text(pax_n.ax.get_xlim()[0], pax_n.ax.get_ylim()[0], 
-        #               'AL: \t${AL_n:+}$ nT\nAU: \t${AU_n:+}$ nT\n $\int j_{uparrow:}$:\t ${jn_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${jn_down:+.1f}$ MA'.format(AL_n = int(np.round(AL_n)), AU_n = int(np.round(AU_n)), jn_up = ju_n, jn_down = jd_n, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
-        # pax_s.ax.text(pax_s.ax.get_xlim()[0], pax_s.ax.get_ylim()[0], 
-        #               'AL: \t${AL_s:+}$ nT\nAU: \t${AU_s:+}$ nT\n $\int j_{uparrow:}$:\t ${js_up:+.1f}$ MA\n $\int j_{downarrow:}$:\t ${js_down:+.1f}$ MA'.format(AL_s = int(np.round(AL_s)), AU_s = int(np.round(AU_s)), js_up = ju_s, js_down = jd_s, uparrow = r'\uparrow',downarrow = r'\downarrow'), ha = 'left', va = 'bottom', size = 12)
 
         plt.subplots_adjust(hspace = 0, wspace = 0.4, left = .05, right = .935, bottom = .05, top = .945)
 
