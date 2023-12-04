@@ -78,7 +78,9 @@ Laundal, K. M., Finlay, C. C., Olsen, N. & Reistad, J. P. (2018), Solar wind and
 
 Acknowledgments
 ---------------
-The code is produced with support from ESA through the Swarm Data Innovation and Science Cluster (Swarm DISC). 
+The Swipe model forward code is produced with support from the European Space Agency through the Swarm Data Innovation and Science Cluster (Swarm DISC), ESA Contract no. 4000109587/13/I-NB. 
+
+The inverse code for producing the Swarm Hi-C model coefficients is available here: https://zenodo.org/badge/latestdoi/674153432
 
 For more information on the Swipe project, please visit https://earth.esa.int/eogateway/activities/swipe
 
