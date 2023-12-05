@@ -32,10 +32,7 @@ Installation
 
 Using pip::
 
-    # Problems with pyPI as of December 2023
-    #pip install pyswipe 
-    # Use this for now
-    pip install -i https://test.pypi.org/simple/ pyswipe==0.9.1
+    pip install pyswipe 
 
 
 Dependencies:
