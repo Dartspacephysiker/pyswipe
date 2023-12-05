@@ -14,7 +14,6 @@ authors = [
 ]
 description = "Python implementation of the Swarm Ionospheric Polar Electrodynamics (Swipe) model"
 readme = "README.rst"
-repository = "https://github.com/Dartspacephysiker/pyswipe"
 
 maintainers = [
     { name = "Spencer M. Hatch", email = "spencer.hatch@ift.uib.no" },
@@ -43,6 +42,11 @@ dependencies = [
     "ppigrf >= 1.0",
     "pyamps >= 1.4.0",
 ]
+
+[project.urls]
+homepage = "https://earth.esa.int/eogateway/activities/swipe"
+repository = "https://github.com/Dartspacephysiker/pyswipe"
+
 
 [project.optional-dependencies]
 test = [
