@@ -3,7 +3,8 @@ requires = ["setuptools >= 64", "setuptools_scm[toml]"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
-homepage = "https://github.com/Dartspacephysiker/pyswipe"
+homepage = "https://earth.esa.int/eogateway/activities/swipe"
+repository = "https://github.com/Dartspacephysiker/pyswipe"
 
 [project]
 name = "pyswipe"
@@ -42,11 +43,6 @@ dependencies = [
     "ppigrf >= 1.0",
     "pyamps >= 1.4.0",
 ]
-
-[project.urls]
-homepage = "https://earth.esa.int/eogateway/activities/swipe"
-repository = "https://github.com/Dartspacephysiker/pyswipe"
-
 
 [project.optional-dependencies]
 test = [
