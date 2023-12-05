@@ -12,6 +12,10 @@ authors = [
     { name = "Spencer M. Hatch", email = "spencer.hatch@ift.uib.no" },
     { name = "Karl M. Laundal"},
 ]
+description = "Python implementation of the Swarm Ionospheric Polar Electrodynamics (Swipe) model"
+readme = "README.rst"
+repository = "https://github.com/Dartspacephysiker/pyswipe"
+
 maintainers = [
     { name = "Spencer M. Hatch", email = "spencer.hatch@ift.uib.no" },
 ]
