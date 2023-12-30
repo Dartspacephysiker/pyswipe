@@ -39,8 +39,8 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 # from pyswipe.plot_utils import equal_area_grid, Polarsubplot, get_h2d_bin_areas
 from pyswipe.plot_utils import equal_area_grid, Polarplot, get_h2d_bin_areas
-from .sh_utils import legendre, get_R_arrays, get_R_arrays__symm, get_A_matrix__Ephizero, get_A_matrix__potzero, SHkeys 
-from .model_utils import get_model_vectors, get_coeffs, default_coeff_fn, get_truncation_levels, get_apex_base_vectors
+from .sh_utils import getG_vel, getG_E, legendre, get_R_arrays, get_R_arrays__symm, get_A_matrix__Ephizero, get_A_matrix__potzero, SHkeys 
+from .model_utils import get_model_vectors, get_coeffs, default_coeff_fn, get_truncation_levels, get_apex_base_vectors, get_m_matrix
 from .mlt_utils import mlt_to_mlon
 from .constants import MU0,REFRE,d2r
 import ppigrf
@@ -1424,8 +1424,7 @@ class SWIPE(object):
 
         # Map E-field if heights are not apex_refheight
         if map_Efield:
-            warnings.warn("Mapping of E-field (or something else?) is currently incorrect!!\nI think what's happening is that you use Apex.map_E_to_height to map the E-field to a higher altitude, when this is already done for you by virtue of the Apex basevectors. Consult with Kalle")
-            # breakpoint()
+
             Egeodold = Egeod.copy()
             Egeod = a.map_E_to_height(mlat.flatten(), mlon.flatten(), apex_refheight,
                                       heights.flatten(),
@@ -1471,9 +1470,9 @@ class SWIPE(object):
         ####################
         # Calculate Poynting flux
         PFlux_geod = np.cross(Egeod.T,deltaBgeod.T).T/MU0*1e3  # convert from W/m^2 to mW/m^2
-        pfluxe1 = e1[0,:]*PFlux_geod[0,:]+e1[1,:]*PFlux_geod[1,:]+e1[2,:]*PFlux_geod[2,:]
-        pfluxe2 = e2[0,:]*PFlux_geod[0,:]+e2[1,:]*PFlux_geod[1,:]+e2[2,:]*PFlux_geod[2,:]
-        pfluxpar = e3[0,:]*PFlux_geod[0,:]+e3[1,:]*PFlux_geod[1,:]+e3[2,:]*PFlux_geod[2,:]
+        pfluxe1 = d1[0,:]*PFlux_geod[0,:]+d1[1,:]*PFlux_geod[1,:]+d1[2,:]*PFlux_geod[2,:]
+        pfluxe2 = d2[0,:]*PFlux_geod[0,:]+d2[1,:]*PFlux_geod[1,:]+d2[2,:]*PFlux_geod[2,:]
+        pfluxpar = d3[0,:]*PFlux_geod[0,:]+d3[1,:]*PFlux_geod[1,:]+d3[2,:]*PFlux_geod[2,:]
         
         return pfluxe1,pfluxe2,pfluxpar
 
@@ -3033,3 +3032,428 @@ class SWIPE(object):
         SigmaP = (J_e * Emphi + J_n * Emlambda)/(Emphi**2+Emlambda**2)
 
         return SigmaP
+
+
+def get_v(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
+          coords = 'geo',
+          chunksize = 15000, coeff_fn = default_coeff_fn):
+    """ Calculate model ion drift velocity in Modified Apex or geodetic coordinates
+
+    This function uses dask to parallelize computations. That means that it is quite
+    fast and that the memory consumption will not explode unless `chunksize` is too large.
+
+    Parameters
+    ----------
+    glat : array_like
+        array of geographic latitudes (degrees)
+    glon : array_like
+        array of geographic longitudes (degrees)
+    height : array_like
+        array of geodetic heights (km)
+    time : array_like
+        list/array of datetimes, needed to calculate magnetic local time
+    v : array_like
+        array of solar wind velocities in GSM/GSE x direction (km/s)
+    By : array_like
+        array of solar wind By values (nT)
+    Bz : array_like
+        array of solar wind Bz values (nT)
+    tilt : array_like
+        array of dipole tilt angles (degrees)
+    f107 : array_like
+        array of F10.7 index values (SFU)
+    epoch : float, optional
+        epoch (year) used in conversion to magnetic coordinates with the IGRF. Default = 2015.
+    h_R : float, optional
+        reference height (km) used when calculating modified apex coordinates. Default = 110.
+    coords : string
+        coordinate system in which to perform calculation, either 'geo' or 'apex'
+    chunksize : int, optional
+        the input arrays will be split in chunks in order to parallelize
+        computations. Larger chunks consumes more memory, but might be faster. Default is 15000.
+    coeff_fn: str, optional
+        file name of model coefficients - must be in format produced by model_vector_to_txt.py
+        (default is latest version)
+
+
+    Returns
+    -------
+    if coords == 'geo':
+
+        ve : array_like
+            array of model electric field (mV/m) in geodetic eastward direction 
+            (same dimension as input)
+        vn : array_like
+            array of model electric field (mV/m) in geodetic northward direction 
+            (same dimension as input)
+        vu : array_like
+            array of model electric field (mV/m) in geodetic upward direction 
+            (same dimension as input)
+    
+    elif coords == 'apex':
+
+        ve1 : array_like
+            array of model electric field (mV/m) in direction of Modified Apex e1 basis vector
+            (same dimension as input)
+        ve2 : array_like
+            array of model electric field (mV/m) in direction of Modified Apex e2 basis vector
+            (same dimension as input)
+
+
+    Note
+    ----
+    Array inputs should have the same dimensions.
+
+    """
+
+    assert coords in ['geo', 'apex']
+
+    try:
+        import dask.array as da
+    except:
+        error = Exception("Couldn't import dask.array!")
+        raise
+
+    m_matrix       = get_m_matrix(coeff_fn)
+    NT, MT         = get_truncation_levels(coeff_fn)
+
+    # number of equations
+    neq = m_matrix.shape[0]
+
+    # turn coordinates/times into dask arrays
+    glat   = da.from_array(glat  , chunks = chunksize)
+    glon   = da.from_array(glon  , chunks = chunksize)
+    time   = da.from_array(time  , chunks = chunksize)
+    height = da.from_array(height, chunks = chunksize)
+
+    # get G0 matrix - but first make a wrapper that only takes dask arrays as input
+    _getG0 = lambda la, lo, h, t: getG_vel(la, lo, h, t, epoch = epoch, h_R = h_R, NT = NT, MT = MT, coords=coords)
+
+    # use that wrapper to calculate G0 for each block
+    G0 = da.map_blocks(_getG0, glat, glon, height, time, chunks = (2*chunksize, neq), new_axis = 1, dtype = np.float64)
+
+    # get a matrix with columns that are 19 unscaled velocity terms at the given coords:
+    v_matrix  = G0.dot( m_matrix ).compute()
+
+    if coords == 'geo':
+        # the rows of v_matrix now correspond to (east, north, up, east, north, up, ...) and must be
+        # reorganized so that we have only three large partitions: (east, north, up). Split and recombine:
+        v_chunks = [v_matrix[i : (i + 3*chunksize)] for i in range(0, v_matrix.shape[0], 3 * chunksize)]
+        v_e = np.vstack(tuple([v[                  :     v.shape[0]//3] for v in v_chunks]))
+        v_n = np.vstack(tuple([v[    v.shape[0]//3 : 2 * v.shape[0]//3] for v in v_chunks]))
+        v_u = np.vstack(tuple([v[2 * v.shape[0]//3 :                  ] for v in v_chunks]))
+        vs  = np.vstack((v_e, v_n, v_u)).T
+    elif coords == 'apex':
+        v_chunks = [v_matrix[i : (i + 2*chunksize)] for i in range(0, v_matrix.shape[0], 2 * chunksize)]
+        v_e1 = np.vstack(tuple([v[                  :     v.shape[0]//2] for v in v_chunks]))
+        v_e2 = np.vstack(tuple([v[    v.shape[0]//2 : 2 * v.shape[0]//2] for v in v_chunks]))
+        # v_r = np.vstack(tuple([v[2 * v.shape[0]//2 :                  ] for v in v_chunks]))
+        vs  = np.vstack((v_e1, v_e2)).T
+
+    # prepare the scales (external parameters)
+    By, Bz, v, tilt, f107 = map(lambda x: x.flatten(), [By, Bz, v, tilt, f107]) # flatten input
+    ca = np.arctan2(By, Bz)
+    epsilon = np.abs(v)**(4/3.) * np.sqrt(By**2 + Bz**2)**(2/3.) * (np.sin(ca/2)**(8))**(1/3.) / 1000 # Newell coupling           
+    tau     = np.abs(v)**(4/3.) * np.sqrt(By**2 + Bz**2)**(2/3.) * (np.cos(ca/2)**(8))**(1/3.) / 1000 # Newell coupling - inverse 
+
+    # make a dict of the 19 external parameters (flat arrays)
+    external_params = {0  : np.ones_like(ca)           ,        # 'const'             
+                       1  : 1              * np.sin(ca),        # 'sinca'             
+                       2  : 1              * np.cos(ca),        # 'cosca'             
+                       3  : epsilon                    ,        # 'epsilon'           
+                       4  : epsilon        * np.sin(ca),        # 'epsilon_sinca'     
+                       5  : epsilon        * np.cos(ca),        # 'epsilon_cosca'     
+                       6  : tilt                       ,        # 'tilt'              
+                       7  : tilt           * np.sin(ca),        # 'tilt_sinca'        
+                       8  : tilt           * np.cos(ca),        # 'tilt_cosca'        
+                       9  : tilt * epsilon             ,        # 'tilt_epsilon'      
+                       10 : tilt * epsilon * np.sin(ca),        # 'tilt_epsilon_sinca'
+                       11 : tilt * epsilon * np.cos(ca),        # 'tilt_epsilon_cosca'
+                       12 : tau                        ,        # 'tau'               
+                       13 : tau            * np.sin(ca),        # 'tau_sinca'         
+                       14 : tau            * np.cos(ca),        # 'tau_cosca'         
+                       15 : tilt * tau                 ,        # 'tilt_tau'          
+                       16 : tilt * tau     * np.sin(ca),        # 'tilt_tau_sinca'    
+                       17 : tilt * tau     * np.cos(ca),        # 'tilt_tau_cosca'    
+                       18 : f107                        }       # 'f107'
+
+    # scale the 19 electric field terms, and add (the scales are tiled once for each component)
+    if coords == 'geo':
+        v = reduce(lambda x, y: x+y, [vs[i] * np.tile(external_params[i], 3) for i in range(19)])
+
+        # the resulting array will be stacked Be, Bn, Bu components. Return the partions
+        return np.split(v, 3)
+
+    elif coords == 'apex':
+        v = reduce(lambda x, y: x+y, [vs[i] * np.tile(external_params[i], 2) for i in range(19)])
+
+        # the resulting array will be stacked Be, Bn, Bu components. Return the partions
+        return np.split(v, 2)
+
+
+def get_E(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
+          coords = 'geo',
+          chunksize = 15000, coeff_fn = default_coeff_fn):
+    """ Calculate model E-field in Modified Apex or geodetic coordinates
+
+    This function uses dask to parallelize computations. That means that it is quite
+    fast and that the memory consumption will not explode unless `chunksize` is too large.
+
+    Parameters
+    ----------
+    glat : array_like
+        array of geographic latitudes (degrees)
+    glon : array_like
+        array of geographic longitudes (degrees)
+    height : array_like
+        array of geodetic heights (km)
+    time : array_like
+        list/array of datetimes, needed to calculate magnetic local time
+    v : array_like
+        array of solar wind velocities in GSM/GSE x direction (km/s)
+    By : array_like
+        array of solar wind By values (nT)
+    Bz : array_like
+        array of solar wind Bz values (nT)
+    tilt : array_like
+        array of dipole tilt angles (degrees)
+    f107 : array_like
+        array of F10.7 index values (SFU)
+    epoch : float, optional
+        epoch (year) used in conversion to magnetic coordinates with the IGRF. Default = 2015.
+    h_R : float, optional
+        reference height (km) used when calculating modified apex coordinates. Default = 110.
+    coords : string
+        coordinate system in which to perform calculation, either 'geo' or 'apex'
+    chunksize : int, optional
+        the input arrays will be split in chunks in order to parallelize
+        computations. Larger chunks consumes more memory, but might be faster. Default is 15000.
+    coeff_fn: str, optional
+        file name of model coefficients - must be in format produced by model_vector_to_txt.py
+        (default is latest version)
+
+
+    Returns
+    -------
+    if coords == 'geo':
+
+        Ee : array_like
+            array of model electric field (mV/m) in geodetic eastward direction 
+            (same dimension as input)
+        En : array_like
+            array of model electric field (mV/m) in geodetic northward direction 
+            (same dimension as input)
+        Eu : array_like
+            array of model electric field (mV/m) in geodetic upward direction 
+            (same dimension as input)
+    
+    elif coords == 'apex':
+
+        Ed1 : array_like
+            array of model electric field (mV/m) in direction of Modified Apex d1 basis vector
+            (same dimension as input)
+        Ed2 : array_like
+            array of model electric field (mV/m) in direction of Modified Apex d2 basis vector
+            (same dimension as input)
+
+
+    Note
+    ----
+    Array inputs should have the same dimensions.
+
+    """
+
+    # TODO: ADD CHECKS ON INPUT (?)
+
+    assert coords in ['geo', 'apex']
+
+    try:
+        import dask.array as da
+    except:
+        error = Exception("Couldn't import dask.array!")
+        raise
+
+    m_matrix       = get_m_matrix(coeff_fn)
+    NT, MT         = get_truncation_levels(coeff_fn)
+
+    # number of equations
+    neq = m_matrix.shape[0]
+
+    # turn coordinates/times into dask arrays
+    glat   = da.from_array(glat  , chunks = chunksize)
+    glon   = da.from_array(glon  , chunks = chunksize)
+    time   = da.from_array(time  , chunks = chunksize)
+    height = da.from_array(height, chunks = chunksize)
+
+    # get G0 matrix - but first make a wrapper that only takes dask arrays as input
+    _getG0 = lambda la, lo, h, t: getG_E(la, lo, h, t, epoch = epoch, h_R = h_R, NT = NT, MT = MT, coords=coords)
+
+    # use that wrapper to calculate G0 for each block
+    G0 = da.map_blocks(_getG0, glat, glon, height, time, chunks = (3*chunksize, neq), new_axis = 1, dtype = np.float64)
+
+    # get a matrix with columns that are 19 unscaled velocity terms at the given coords:
+    E_matrix  = G0.dot( m_matrix ).compute()
+
+    if coords == 'geo':
+        # the rows of E_matrix now correspond to (east, north, up, east, north, up, ...) and must be
+        # reorganized so that we have only three large partitions: (east, north, up). Split and recombine:
+        E_chunks = [E_matrix[i : (i + 3*chunksize)] for i in range(0, E_matrix.shape[0], 3 * chunksize)]
+        E_e = np.vstack(tuple([E[                  :     E.shape[0]//3] for E in E_chunks]))
+        E_n = np.vstack(tuple([E[    E.shape[0]//3 : 2 * E.shape[0]//3] for E in E_chunks]))
+        E_u = np.vstack(tuple([E[2 * E.shape[0]//3 :                  ] for E in E_chunks]))
+        Es  = np.vstack((E_e, E_n, E_u)).T
+    elif coords == 'apex':
+        E_chunks = [E_matrix[i : (i + 2*chunksize)] for i in range(0, E_matrix.shape[0], 2 * chunksize)]
+        E_d1 = np.vstack(tuple([E[                  :     E.shape[0]//2] for E in E_chunks]))
+        E_d2 = np.vstack(tuple([E[    E.shape[0]//2 :                  ] for E in E_chunks]))
+        Es  = np.vstack((E_d1, E_d2)).T
+        
+    # prepare the scales (external parameters)
+    By, Bz, v, tilt, f107 = map(lambda x: x.flatten(), [By, Bz, v, tilt, f107]) # flatten input
+    ca = np.arctan2(By, Bz)
+    epsilon = np.abs(v)**(4/3.) * np.sqrt(By**2 + Bz**2)**(2/3.) * (np.sin(ca/2)**(8))**(1/3.) / 1000 # Newell coupling           
+    tau     = np.abs(v)**(4/3.) * np.sqrt(By**2 + Bz**2)**(2/3.) * (np.cos(ca/2)**(8))**(1/3.) / 1000 # Newell coupling - inverse 
+
+    # make a dict of the 19 external parameters (flat arrays)
+    external_params = {0  : np.ones_like(ca)           ,        # 'const'             
+                       1  : 1              * np.sin(ca),        # 'sinca'             
+                       2  : 1              * np.cos(ca),        # 'cosca'             
+                       3  : epsilon                    ,        # 'epsilon'           
+                       4  : epsilon        * np.sin(ca),        # 'epsilon_sinca'     
+                       5  : epsilon        * np.cos(ca),        # 'epsilon_cosca'     
+                       6  : tilt                       ,        # 'tilt'              
+                       7  : tilt           * np.sin(ca),        # 'tilt_sinca'        
+                       8  : tilt           * np.cos(ca),        # 'tilt_cosca'        
+                       9  : tilt * epsilon             ,        # 'tilt_epsilon'      
+                       10 : tilt * epsilon * np.sin(ca),        # 'tilt_epsilon_sinca'
+                       11 : tilt * epsilon * np.cos(ca),        # 'tilt_epsilon_cosca'
+                       12 : tau                        ,        # 'tau'               
+                       13 : tau            * np.sin(ca),        # 'tau_sinca'         
+                       14 : tau            * np.cos(ca),        # 'tau_cosca'         
+                       15 : tilt * tau                 ,        # 'tilt_tau'          
+                       16 : tilt * tau     * np.sin(ca),        # 'tilt_tau_sinca'    
+                       17 : tilt * tau     * np.cos(ca),        # 'tilt_tau_cosca'    
+                       18 : f107                        }       # 'f107'
+
+    # scale the 19 electric field terms, and add (the scales are tiled once for each component)
+    if coords == 'geo':
+        E = reduce(lambda x, y: x+y, [Es[i] * np.tile(external_params[i], 3) for i in range(19)])
+
+        # the resulting array will be stacked Ee, En, Eu components. Return the partions
+        return np.split(E, 3)
+
+    elif coords == 'apex':
+        E = reduce(lambda x, y: x+y, [Es[i] * np.tile(external_params[i], 2) for i in range(19)])
+        
+        # the resulting array will be stacked Ed1, Ed2 components. Return the partions
+        return np.split(E, 2)
+
+
+
+def get_pflux(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
+              coords = 'geo',
+              chunksize = 15000,
+              killpoloidalB=True):
+    """ Calculate model Poynting flux in geodetic coordinates
+
+    This function uses dask to parallelize computations. That means that it is quite
+    fast and that the memory consumption will not explode unless `chunksize` is too large.
+
+    Parameters
+    ----------
+    glat : array_like
+        array of geographic latitudes (degrees)
+    glon : array_like
+        array of geographic longitudes (degrees)
+    height : array_like
+        array of geodetic heights (km)
+    time : array_like
+        list/array of datetimes, needed to calculate magnetic local time
+    v : array_like
+        array of solar wind velocities in GSM/GSE x direction (km/s)
+    By : array_like
+        array of solar wind By values (nT)
+    Bz : array_like
+        array of solar wind Bz values (nT)
+    tilt : array_like
+        array of dipole tilt angles (degrees)
+    f107 : array_like
+        array of F10.7 index values (SFU)
+    epoch : float, optional
+        epoch (year) used in conversion to magnetic coordinates with the IGRF. Default = 2015.
+    h_R : float, optional
+        reference height (km) used when calculating modified apex coordinates. Default = 110.
+    chunksize : int, optional
+        the input arrays will be split in chunks in order to parallelize
+        computations. Larger chunks consumes more memory, but might be faster. Default is 15000.
+    killpoloidalB : bool
+        killpoloidalB added because the divergence of Poynting flux given by an E-field and a B-field that are represented by gradients of scalar potentials is zero. 
+        Thus the contribution to the divergence of Poynting flux from poloidal ΔB perturbations (at least when ΔB^pol = - grad(V) with V a scalar) is zero.
+        In other words: only use killpoloidalB==False if you understand that the addition it provides to the Poynting flux does NOT contribute to Joule heating in the ionosphere!
+
+    Returns
+    -------
+    if coords == 'geo':
+
+        Ee : array_like
+            array of model electric field (mV/m) in geodetic eastward direction 
+            (same dimension as input)
+        En : array_like
+            array of model electric field (mV/m) in geodetic northward direction 
+            (same dimension as input)
+        Eu : array_like
+            array of model electric field (mV/m) in geodetic upward direction 
+            (same dimension as input)
+    
+    # elif coords == 'apex':
+
+    # NOT IMPLEMENTED!
+    #     Ed1 : array_like
+    #         array of model electric field (mV/m) in direction of Modified Apex d1 basis vector
+    #         (same dimension as input)
+    #     Ed2 : array_like
+    #         array of model electric field (mV/m) in direction of Modified Apex d2 basis vector
+    #         (same dimension as input)
+
+
+    Note
+    ----
+    Array inputs should have the same dimensions.
+
+    """
+
+    from pyamps import get_B_space
+
+    assert coords in ['geo','apex']
+
+    # E-field in mV/m and geodetic coordinates
+    E_e, E_n, E_u = get_E(glat, glon, height, time, v, By, Bz, tilt, f107,
+                          coords = 'geo',
+                          epoch = epoch, h_R = h_R, chunksize = chunksize)
+
+    # B-field in nT and geodetic coordinates
+    B_e, B_n, B_u = get_B_space(glat, glon, height, time, v, By, Bz, tilt, f107,
+                                epoch = epoch, h_R = h_R, chunksize = chunksize,
+                                killpoloidal=killpoloidalB)
+
+    glat   = np.asarray(glat).flatten()
+    glon   = np.asarray(glon).flatten()
+    height = np.asarray(height).flatten()
+
+    pflux = (np.cross(np.vstack([E_e,E_n,E_u]).T / 1e3, np.vstack([B_e,B_n,B_u]).T / 1e9)/MU0*1e3).T
+
+    if coords == 'geo':
+
+        return pflux
+
+    elif coords == 'apex':
+
+        # convert to magnetic coords and get base vectors
+        a = apexpy.Apex(epoch, refh = h_R)
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = a.basevectors_apex(glat, glon, height, coords  = 'geo')
+    
+        pfluxe1, pfluxe2, pfluxpar = np.sum(d1*pflux,axis=0), np.sum(d2*pflux,axis=0), np.sum(d3*pflux,axis=0)
+
+        return np.vstack([pfluxe1, pfluxe2, pfluxpar])
+
+

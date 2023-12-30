@@ -44,19 +44,19 @@ def get_truncation_levels(coeff_fn = default_coeff_fn):
     return NT, MT
 
 
-# def get_m_matrix(coeff_fn = default_coeff_fn):
-#     """ make matrix of model coefficients - used in get_B_space for fast calculations
-#         of model field time series along trajectory with changing input
-#     """
-#     coeffs = get_coeffs(coeff_fn)
+def get_m_matrix(coeff_fn = default_coeff_fn):
+    """ make matrix of model coefficients - used in get_E for fast calculations
+        of model field time series along trajectory with changing input
+    """
+    coeffs = get_coeffs(coeff_fn)
 
-#     # m_matrix = np.array([np.hstack((coeffs.loc[:, 'tor_c_' + ss].dropna().values,
-#     #                                 coeffs.loc[:, 'tor_s_' + ss].dropna().values,
-#     #                                 coeffs.loc[:, 'pol_c_' + ss].dropna().values,
-#     #                                 coeffs.loc[:, 'pol_s_' + ss].dropna().values)) for ss in names]).T
-#     m_matrix = np.array([np.hstack((coeffs.loc[:, 'tor_c_' + ss].dropna().values,
-#                                     coeffs.loc[:, 'tor_s_' + ss].dropna().values)) for ss in names]).T
-#     return m_matrix
+    # m_matrix = np.array([np.hstack((coeffs.loc[:, 'tor_c_' + ss].dropna().values,
+    #                                 coeffs.loc[:, 'tor_s_' + ss].dropna().values,
+    #                                 coeffs.loc[:, 'pol_c_' + ss].dropna().values,
+    #                                 coeffs.loc[:, 'pol_s_' + ss].dropna().values)) for ss in names]).T
+    m_matrix = np.array([np.hstack((coeffs.loc[:, 'tor_c_' + ss].dropna().values,
+                                    coeffs.loc[:, 'tor_s_' + ss].dropna().values)) for ss in names]).T
+    return m_matrix
 
 
 def get_model_vectors(v, By, Bz, tilt, f107, epsilon_multiplier = 1., coeff_fn = default_coeff_fn):
