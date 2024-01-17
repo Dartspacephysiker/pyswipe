@@ -573,7 +573,7 @@ class Polarplot(object):
         if verbose:
             print(lt.shape, lat.shape, latres.shape, ltres.shape)
 
-        la = np.vstack(((lt - 6) / 12. * np.pi + i * ltres / (resolution - 1.) / 12. * np.pi for i in range(resolution))).T
+        la = np.vstack([(lt - 6) / 12. * np.pi + i * ltres / (resolution - 1.) / 12. * np.pi for i in range(resolution)]).T
         if verbose:
             print (la.shape)
         ua = la[:, ::-1]
