@@ -259,12 +259,9 @@ class SWIPE(object):
             min_Efield__mVm = np.float64(min_Efield__mVm)
         self.min_Efield__mVm = min_Efield__mVm
 
-        if min_emwork is None:
-            self.min_emwork = DEFAULT_MIN_EMWORK
-        if min_hall is None:
-            self.min_hall = DEFAULT_MIN_HALL
-        if max_hall is None:
-            self.max_hall = DEFAULT_MAX_HALL
+        self.min_emwork = DEFAULT_MIN_EMWORK if min_emwork is None else min_emwork
+        self.min_hall = DEFAULT_MIN_HALL if min_hall is None else min_hall
+        self.max_hall = DEFAULT_MAX_HALL if max_hall is None else max_hall
 
         self.pax_plotopts = dict(minlat = self.minlat,
                                  linestyle = ':',
@@ -939,7 +936,11 @@ class SWIPE(object):
         #         return ve1.reshape(shape), ve2.reshape(shape)
 
 
-    def get_emwork(self, mlat = None, mlt = None, grid = False):
+    def get_emwork(self, mlat = None, mlt = None, grid = False,
+                   angle_uncertainty_deg=None,
+                   magnitude_frac_uncertainty=None,
+                   min_J_uncertainty=None,
+                   min_E_uncertainty=None):
         """ 
         Calculate E&M work, in mW/m^2, from the Swarm Hi-C and AMPS models.
         E&M work is the term J.E in Poynting's theorem, and depends on reference frame.
@@ -965,6 +966,11 @@ class SWIPE(object):
             if True, mlat and mlt are interpreted as coordinates in a regular grid. They must be 
             1-dimensional, and the output will have dimensions len(mlat) x len(mlt). If mlat and mlt 
             are not set, this keyword is ignored.
+        angle_uncertainty_deg: float, optional, default None
+            the uncertainty in the angle between J and E, in degrees. If not None, calculate the uncertainty of 
+            the E&M work assuming the ONLY source of uncertainty is the angle between J and E.
+        magnitude_frac_uncertainty: float, optional, default None
+           the fractional uncertainty of the magnitudes of J and E.
 
         Return
         ------
@@ -1005,7 +1011,15 @@ class SWIPE(object):
         Emphi = Ed1             # eastward component
         Emlambda = -Ed2 * sinI  # northward component, trur eg
 
-        return self._emwork_func(J_e, J_n, Emphi, Emlambda)
+        if (angle_uncertainty_deg is None) and (magnitude_frac_uncertainty is None) and (min_J_uncertainty is None) and (min_E_uncertainty is None):
+            return self._emwork_func(J_e, J_n, Emphi, Emlambda)
+        else:
+            print("from get_emwork: EM work angle uncertainty: ",angle_uncertainty_deg," deg")
+            return self._emwork_func(J_e, J_n, Emphi, Emlambda), self._emwork_uncertainty(J_e, J_n, Emphi, Emlambda,
+                                                                                          angle_uncertainty_deg=angle_uncertainty_deg,
+                                                                                          magnitude_frac_uncertainty=magnitude_frac_uncertainty,
+                                                                                          min_J_uncertainty=min_J_uncertainty,
+                                                                                          min_E_uncertainty=min_E_uncertainty)
 
 
     def get_conductances(self, mlat = None, mlt = None, grid = False):
@@ -1594,25 +1608,41 @@ class SWIPE(object):
         return sign*Pe3
 
 
-    def get_integ_power(self,JH=None):
+    def get_integ_power(self,JH=None,dJH=None,angle_uncertainty_deg=None):
         """
         Integrate electromagnetic work over entire high-latitude area in each hemisphere
 
         JH, if not "None", should be an array of the same shape as what is provided
         by SWIPE.get_emwork()
+
+        dJH is the uncertainty of the EM work calculation. If not None, also calculate uncertainty of integrated power
+
         """
 
+        do_uncertainty_calc = (angle_uncertainty_deg is not None) or (dJH is not None)
         if JH is None:
             
             mlat,mlt = self.scalargrid
             mlat,mlt = mlat.ravel(),mlt.ravel()
-            JH = self.get_emwork(mlat,mlt)
 
-            JHN,JHS = np.split(JH,2)
+            if do_uncertainty_calc:
+                JH, dJH = self.get_emwork(mlat,mlt,angle_uncertainty_deg=angle_uncertainty_deg)
+
+                JHN,JHS = np.split(JH,2)
+                dJHN,dJHS = np.split(dJH,2)
+
+            else:
+                JH = self.get_emwork(mlat,mlt)
+                JHN,JHS = np.split(JH,2)
 
         else:
             
+            assert angle_uncertainty_deg is None,"When you provide your own JH values (as you have done now), you must also provide your own dJH if you wish to do the uncertainty calculation"
+
             JHN,JHS = np.split(JH,2)
+
+            if dJH is not None:
+                dJHN,dJHS = np.split(dJH,2)
 
         mlatmin,mlatmax,mltmin,mltmax = self.get_grid_binedges(gridtype='scalar')
 
@@ -1628,7 +1658,17 @@ class SWIPE(object):
         integN = np.sum((JHN*1e-3)*(binareas*1e6))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
         integS = np.sum((JHS*1e-3)*(binareas*1e6))/1e9
 
-        return integN, integS
+        if do_uncertainty_calc:
+            dintegN = np.sqrt(np.sum( ((dJHN*1e-3)*(binareas*1e6))**2 ))/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
+            dintegS = np.sqrt(np.sum( ((dJHS*1e-3)*(binareas*1e6))**2 ))/1e9
+
+            # dintegN = np.sum( (dJHN*1e-3)*(binareas*1e6) )/1e9  # convert mW/m^2 -> W/m^2 and km^2 -> m^2
+            # dintegS = np.sum( (dJHS*1e-3)*(binareas*1e6) )/1e9
+
+            return integN, integS, dintegN, dintegS
+        else:
+            return integN, integS
+
 
 
     def plot_potential(self,
@@ -1705,8 +1745,8 @@ class SWIPE(object):
             Ed2NH, Ed2SH = np.split(Ed2, 2)
             # nn, ns = np.split(j_n, 2)
             # en, es = np.split(j_e, 2)
-            pax_n.plotpins(mlatv, mltv, -Ed2NH, Ed1NH, SCALE = vector_scale, markersize = 10, unit = None, linewidth = .5, color = 'gray', markercolor = 'grey')
-            pax_s.plotpins(mlatv, mltv, -Ed2SH, Ed1SH, SCALE = vector_scale, markersize = 10, unit = 'mV/m', linewidth = .5, color = 'gray', markercolor = 'grey')
+            pax_n.plotpins(mlatv, mltv, -Ed2NH, Ed1NH, SCALE = vector_scale, markersize = 10, unit = None, linewidth = .5, color = 'gray', markercolor = None)
+            pax_s.plotpins(mlatv, mltv, -Ed2SH, Ed1SH, SCALE = vector_scale, markersize = 10, unit = 'mV/m', linewidth = .5, color = 'gray', markercolor = None)
         else:
             if vector_scale is None:
                 vector_scale = 300  # m/s
@@ -1715,8 +1755,8 @@ class SWIPE(object):
             ve2NH, ve2SH = np.split(ve2, 2)
             # nn, ns = np.split(j_n, 2)
             # en, es = np.split(j_e, 2)
-            pax_n.plotpins(mlatv, mltv, -ve2NH, ve1NH, SCALE = vector_scale, markersize = 10, unit = 'm/s', linewidth = .5, color = 'gray', markercolor = 'grey')
-            pax_s.plotpins(mlatv, mltv, -ve2SH, ve1SH, SCALE = vector_scale, markersize = 10, unit = None  , linewidth = .5, color = 'gray', markercolor = 'grey')
+            pax_n.plotpins(mlatv, mltv, -ve2NH, ve1NH, SCALE = vector_scale, markersize = 10, unit = 'm/s', linewidth = .5, color = 'gray', markercolor = 'white')
+            pax_s.plotpins(mlatv, mltv, -ve2SH, ve1SH, SCALE = vector_scale, markersize = 10, unit = None  , linewidth = .5, color = 'gray', markercolor = 'white')
 
         # NEW
         # calculate and plot potential
@@ -2442,7 +2482,11 @@ class SWIPE(object):
                     axS=None,
                     cax=None,
                     cax_opts=dict(),
-                    suppress_labels=False):
+                    suppress_labels=False,
+                    angle_uncertainty_deg=None,
+                    magnitude_frac_uncertainty=None,
+                    min_J_uncertainty=None,
+                    min_E_uncertainty=None):
         """ 
         Create a summary plot of the ionospheric Joule dissipation
 
@@ -2470,8 +2514,15 @@ class SWIPE(object):
         # Want the scalar grid? Uncomment here
         mlat,mlt = self.scalargrid
         mlat,mlt = mlat.ravel(),mlt.ravel()
-        JH = self.get_emwork(mlat,mlt)
-
+        JH = self.get_emwork(mlat,mlt,angle_uncertainty_deg=angle_uncertainty_deg,
+                             magnitude_frac_uncertainty=magnitude_frac_uncertainty,
+                             min_J_uncertainty=min_J_uncertainty,
+                             min_E_uncertainty=min_E_uncertainty)
+        if (angle_uncertainty_deg is not None) or (magnitude_frac_uncertainty is not None) or (min_J_uncertainty is not None) or (min_E_uncertainty is not None):
+            JH, dJH = JH
+        else:
+            dJH = None
+            
         JHN,JHS = np.split(JH,2)
 
         # set up figure and polar coordinate plots:
@@ -2551,12 +2602,21 @@ class SWIPE(object):
         # Add integrated power
         addintegpower = True
         if addintegpower:
-            integN, integS = self.get_integ_power(JH=JH)
+            if dJH is not None:
+                integN, integS, dintegN, dintegS = self.get_integ_power(JH=JH,dJH=dJH)
 
-            pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
-                        ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
-            pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
-                        ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+                pax_n.write(self.minlat, 9, f"{integN:4.1f} ± {dintegN:4.1f} GW",
+                            ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+                pax_s.write(self.minlat, 9, f"{integS:4.1f} ± {dintegS:4.1f} GW",
+                            ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+
+            else:
+                integN, integS = self.get_integ_power(JH=JH)
+
+                pax_n.write(self.minlat, 9, f"{integN:4.1f} GW",
+                            ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
+                pax_s.write(self.minlat, 9, f"{integS:4.1f} GW",
+                            ha = 'left', va = 'bottom', size = 16, ignore_plot_limits=True)
 
 
         if (axN is None) or (axS is None) or (cax is None):
@@ -2998,12 +3058,59 @@ class SWIPE(object):
         """
         In this function it is assumed that 
         • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
-        • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emph = Ed1, Emlambda = -Ed2 * sinI
+        • Emphi and Emlambda (in V/m) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emphi = Ed1, Emlambda = -Ed2 * sinI
 
         The output of this function is in mW/m²
         """
 
         return (J_e * Emphi + J_n * Emlambda)*1000
+
+
+    def _emwork_uncertainty(self, J_e, J_n, Emphi, Emlambda,
+                            angle_uncertainty_deg=None,
+                            magnitude_frac_uncertainty=None,
+                            min_J_uncertainty=None,
+                            min_E_uncertainty=None,
+                            verbose=True):
+        """
+        Calculate uncertainty of EM work calculation assuming one or both of
+        i. the angle between J and E is uncertain;
+        ii. the uncertainty of the magnitudes of J and E are a given fraction of the magnitudes themselves
+
+        min_J_uncertainty should be given in units of A/m (a typical value might be, say, .005 A/m)
+
+        min_E_uncertainty should be given in units of V/m (a typical value might be, say, .001 V/m)
+        """
+
+        dJfrac = 0. if (magnitude_frac_uncertainty is None) else magnitude_frac_uncertainty
+
+        dangle = 0. if (angle_uncertainty_deg is None) else angle_uncertainty_deg
+
+        Jmag = np.sqrt(J_e**2 + J_n**2)
+        Emag = np.sqrt(Emphi**2 + Emlambda**2)
+
+        dJmag = Jmag*dJfrac
+        dEmag = Emag*dJfrac
+
+        if min_J_uncertainty is not None:
+            if verbose:
+                print(f"Setting min Jmag uncertainty to {min_J_uncertainty} A/m")
+            dJmag = np.clip(dJmag,min_J_uncertainty,None)
+        if min_E_uncertainty is not None:
+            if verbose:
+                print(f"Setting min Emag uncertainty to {min_E_uncertainty} V/m")
+            dEmag = np.clip(dEmag,min_E_uncertainty,None)
+
+        # calc angle between J and E
+        angle = np.arccos( (J_e * Emphi + J_n * Emlambda) / Jmag / Emag )
+        
+        print("from _emwork_uncertainty: EM work angle uncertainty: ",dangle," deg")
+
+        # return Jmag*Emag*np.abs(np.sin(angle) * np.deg2rad(dangle))*1000
+
+        return np.sqrt(  (dJmag*Emag *np.cos(angle) )**2 + \
+                         (Jmag *dEmag*np.cos(angle) )**2 + \
+                         (Jmag*Emag* np.sin(angle) * np.deg2rad(dangle))**2 )*1000
 
 
     def _sigmahall_func(self, J_e, J_n, Emphi, Emlambda, mlat):

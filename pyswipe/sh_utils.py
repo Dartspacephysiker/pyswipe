@@ -928,10 +928,14 @@ def getG_vel(glat, glon, height, time, epoch = 2015., h_R = 110.,
     e2u = e2[2].reshape(-1, 1)
 
     from datetime import datetime
-    Be, Bn, Bu = ppigrf.igrf(glon,
-                             glat,
-                             height,
-                             datetime(int(epoch),int((epoch-int(epoch))*12),1))
+    Be, Bn, Bu = ppigrf.igrf(
+        glon,
+        glat,
+        height,
+        datetime(int(epoch),
+                 np.clip(int((epoch-int(epoch))*12),1,12),
+                 1)
+    )
     B0IGRF = np.sqrt(Be**2+Bn**2+Bu**2)
 
     D = np.sqrt( (d1n*d2u-d1u*d2n)**2 + \
