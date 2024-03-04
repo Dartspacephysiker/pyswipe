@@ -2,7 +2,7 @@
 # Produced 19 July 2023
 #
 # Based on Swarm convection measurements made between 2013-12 to 2020.
-# Reference: Laundal et al., "Solar wind and seasonal influence on ionospheric currents", Journal of Geophysical Research - Space Physics, doi:10.1029/2018JA025387, 2018
+# Reference: Hatch, S. M., Vanhamäki, H., Laundal, K. M., Reistad, J. P., Burchill, J., Lomidze, L., Knudsen, D., Madelaire, M., & Tesfaw, H. (2023). Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry? EGUsphere, 2023, 1–41. https://doi.org/10.5194/egusphere-2023-2920
 #
 # Coefficient unit: mV/m
 # Apex reference height: 110 km
