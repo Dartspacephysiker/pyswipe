@@ -190,11 +190,14 @@ for tilt in tilts:#tilt = tilts[0]
 
 
             axes[i][j].contourf(mlat_n, mlt_n, phin, levels = tmplevels, cmap = plt.cm.bwr, extend = 'both')
+
+            topleftstring = r"$\Delta$cont" + f" = {dlevel:.1f} kV"
+
             if not no_SH:
                 axes[i][j].contour (mlat_s, mlt_s, phis, levels = tmplevels, colors = 'k' , extend = 'both', linewidths = .4)
 
                 # showstring = f'$\Delta \Phi_N=$ {dPhiN:.1f}' + f' kV\n$\Delta \Phi_S=$ {dPhiS:.1f}' + f' kV\n$\Delta \Phi_N/\Delta \Phi_S=$ {dPhiN/dPhiS:.2f}'
-                showstring = f'$\Delta \Phi_N=$ {dPhiN:.0f}' + f' kV\n$\Delta \Phi_S=$ {dPhiS:.0f}' + f' kV\n$\Delta \Phi_N/\Delta \Phi_S=$ {dPhiN/dPhiS:.2f}'
+                showstring = f'$\Delta \Phi_N=$ {dPhiN:.0f}' + f' kV\n$\Delta \Phi_S=$ {dPhiS:.0f}' + f' kV\n$\Delta \Phi_N/\Delta \Phi_S=$ {dPhiN/dPhiS:.1f}'
 
             else:
 
@@ -228,6 +231,11 @@ for tilt in tilts:#tilt = tilts[0]
             axes[i][j].write(55, 10.2, showstring,
                              ha = 'left', va = 'top', size = 9, multialignment='left')
                 #axes[i][j].write(60, 10, '$\Delta+' + '{:.2f}'.format(psi.max()) + '\mu$A/m$^2$\n $\\nabla' + '{:.2f}'.format(psi.min()) + ' \mu$A/m$^2$', ha = 'left', va = 'bottom', size = 9, multialignment='left')
+
+            axes[i][j].write(55, 13.8, topleftstring,
+                             ha = 'center', va = 'top', size = 9,
+                             multialignment='center',
+                             ignore_plot_limits=True)
 
             # facdat = {'north_up':j_up_n, 'south_up':j_up_s,
             #           'north_down':j_down_n, 'south_down':j_down_s,

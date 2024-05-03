@@ -174,16 +174,18 @@ for tilt in tilts:#tilt = tilts[0]
 
             tmplevels = np.linspace(-tmpMAX,tmpMAX,Ncontour)
             dlevel = np.diff(tmplevels)[0]
-            print(i,j,_ca,dlevel)
+            print(i,j,_ca,dlevel,np.mean(phin),np.median(phin),np.mean(phis),np.median(phis))
             tmplevels = tmplevels[:-1]+np.diff(tmplevels)[0]/2
             tmplevels = np.concatenate([[potmin], tmplevels ,[potmax]])
 
             contn = axes[i][j].contourf(mlat_n, mlt_n, phin, levels = tmplevels, cmap = cmap, extend = extend)
 
+            topleftstring = r"$\Delta$cont" + f" = {dlevel:.1f} mW/m$^2$"
+
             if not no_SH:
                 conts = axes[i][j].contour (mlat_s, mlt_s, phis, levels = tmplevels, colors = 'k' , extend = extend, linewidths = .4)
 
-                showstring = f'$W_N=$ {dPhiN:.0f}' + f' GW\n$W_S=$ {dPhiS:.0f}' + f' GW\n$W_N/W_S=$ {dPhiN/dPhiS:.2f}'
+                showstring = f'$W_N=$ {dPhiN:.0f}' + f' GW\n$W_S=$ {dPhiS:.0f}' + f' GW\n$W_N/W_S=$ {dPhiN/dPhiS:.1f}'
 
             else:
                 
@@ -221,6 +223,11 @@ for tilt in tilts:#tilt = tilts[0]
                              ignore_plot_limits=True)
 
 
+            axes[i][j].write(60, 13.8, topleftstring,
+                             ha = 'center', va = 'top', size = 9,
+                             multialignment='center',
+                             ignore_plot_limits=True)
+
     axdial.text(0, 0, r"$\mathbf{J}\cdot\mathbf{E}$ work"+u'\n(Earth-fixed frame)', ha = 'center', va = 'center', size = 14)
 
     plt.subplots_adjust(hspace = .01, wspace = .01, left = .01, right = .99, bottom = .05, top = .99)
@@ -257,7 +264,7 @@ for tilt in tilts:#tilt = tilts[0]
         figname = plotdir+'swipe_emwork_ns_comparison_' + tiltstr + f'_deg_tilt_noSH__{Ncontour}contours.png'
     else:
         figname = plotdir+'swipe_emwork_ns_comparison_' + tiltstr + f'_deg_tilt__{Ncontour}contours.png'
-    plt.savefig(figname, dpi = 300)
+    # plt.savefig(figname, dpi = 300)
 
 print("Save data ...")
 plt.show()

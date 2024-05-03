@@ -25,7 +25,7 @@ pyswipe can be used to calculate and plot several different quantities on a grid
 - Hall and Pedersen conductances (scalars)
 - Poynting flux (scalar)
 
-For questions and comments, please contact spencer.hatch at ift.uib.no
+For questions and comments, please contact spencer.hatch at uib.no
 
 Installation
 ------------

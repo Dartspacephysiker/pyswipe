@@ -15,21 +15,21 @@ from .sh_utils import SHkeys
 # header
 t = time.ctime().split(' ')
 date = ' '.join([t[1], t[-1]])
-header = '# Sherical harmonic coefficients for the Average Magnetic field and Polar current System (AMPS) model\n'
+header = '# Sherical harmonic coefficients for the Swarm Hi-latitude Convection (Swarm Hi-C) model\n'
 header = header + '# Produced ' + date
 header = header + """
 #
-# Based on magnetic field measurements from CHAMP (2001-08 to 2010-09) and Swarm (2013-12 to 2021-02).
-# Reference: Laundal et al., "Solar wind and seasonal influence on ionospheric currents", Journal of Geophysical Research - Space Physics, doi:10.1029/2018JA025387, 2018
+# Based on ion drift measurements from Swarm (2014-05 to 2023-04).
+# Reference: Hatch, S. M., Vanhamäki, H., Laundal, K. M., Reistad, J. P., Burchill, J., Lomidze, L., Knudsen, D., Madelaire, M., & Tesfaw, H. (2023). Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry? EGUsphere, 2023, 1–41. https://doi.org/10.5194/egusphere-2023-2920
 #
-# Coefficient unit: nT
+# Coefficient unit: V/m
 # Apex reference height: 110 km
 # Earth radius: 6371.2 km
 #
-# Spherical harmonic degree, order: 65, 3 (for T) and 45, 3 (for V)
+# Spherical harmonic degree, order: 65, 3 
 # 
 # column names:
-# n m tor_c_const tor_s_const pol_c_const pol_s_const tor_c_sinca tor_s_sinca pol_c_sinca pol_s_sinca tor_c_cosca tor_s_cosca pol_c_cosca pol_s_cosca tor_c_epsilon tor_s_epsilon pol_c_epsilon pol_s_epsilon tor_c_epsilon_sinca tor_s_epsilon_sinca pol_c_epsilon_sinca pol_s_epsilon_sinca tor_c_epsilon_cosca tor_s_epsilon_cosca pol_c_epsilon_cosca pol_s_epsilon_cosca tor_c_tilt tor_s_tilt pol_c_tilt pol_s_tilt tor_c_tilt_sinca tor_s_tilt_sinca pol_c_tilt_sinca pol_s_tilt_sinca tor_c_tilt_cosca tor_s_tilt_cosca pol_c_tilt_cosca pol_s_tilt_cosca tor_c_tilt_epsilon tor_s_tilt_epsilon pol_c_tilt_epsilon pol_s_tilt_epsilon tor_c_tilt_epsilon_sinca tor_s_tilt_epsilon_sinca pol_c_tilt_epsilon_sinca pol_s_tilt_epsilon_sinca tor_c_tilt_epsilon_cosca tor_s_tilt_epsilon_cosca pol_c_tilt_epsilon_cosca pol_s_tilt_epsilon_cosca tor_c_tau tor_s_tau pol_c_tau pol_s_tau tor_c_tau_sinca tor_s_tau_sinca pol_c_tau_sinca pol_s_tau_sinca tor_c_tau_cosca tor_s_tau_cosca pol_c_tau_cosca pol_s_tau_cosca tor_c_tilt_tau tor_s_tilt_tau pol_c_tilt_tau pol_s_tilt_tau tor_c_tilt_tau_sinca tor_s_tilt_tau_sinca pol_c_tilt_tau_sinca pol_s_tilt_tau_sinca tor_c_tilt_tau_cosca tor_s_tilt_tau_cosca pol_c_tilt_tau_cosca pol_s_tilt_tau_cosca tor_c_f107 tor_s_f107 pol_c_f107 pol_s_f107
+# n m tor_c_const tor_s_const tor_c_sinca tor_s_sinca tor_c_cosca tor_s_cosca tor_c_epsilon tor_s_epsilon tor_c_epsilon_sinca tor_s_epsilon_sinca tor_c_epsilon_cosca tor_s_epsilon_cosca tor_c_tilt tor_s_tilt tor_c_tilt_sinca tor_s_tilt_sinca tor_c_tilt_cosca tor_s_tilt_cosca tor_c_tilt_epsilon tor_s_tilt_epsilon tor_c_tilt_epsilon_sinca tor_s_tilt_epsilon_sinca tor_c_tilt_epsilon_cosca tor_s_tilt_epsilon_cosca tor_c_tau tor_s_tau tor_c_tau_sinca tor_s_tau_sinca tor_c_tau_cosca tor_s_tau_cosca tor_c_tilt_tau tor_s_tilt_tau tor_c_tilt_tau_sinca tor_s_tilt_tau_sinca tor_c_tilt_tau_cosca tor_s_tilt_tau_cosca tor_c_f107 tor_s_f107
 """
 
 
@@ -64,13 +64,11 @@ def vector_to_df(m_vec):
 
     tor_c = pd.Series(m_vec[                                           : m_cos_T.size                              ], index = keys['cos_T'], name = 'tor_c')
     tor_s = pd.Series(m_vec[m_cos_T.size                               : m_cos_T.size + m_sin_T.size               ], index = keys['sin_T'], name = 'tor_s')
-    pol_c = pd.Series(m_vec[m_cos_T.size + m_sin_T.size                : m_cos_T.size + m_sin_T.size + m_cos_V.size], index = keys['cos_V'], name = 'pol_c')
-    pol_s = pd.Series(m_vec[m_cos_T.size + m_sin_T.size + m_cos_V.size :                                           ], index = keys['sin_V'], name = 'pol_s')
 
     # merge the series into one DataFrame, and fill in zeros where the terms are undefined
-    return pd.concat((tor_c, tor_s, pol_c, pol_s), axis = 1)
+    return pd.concat((tor_c, tor_s), axis = 1)
 
-# get one set of coefficients per external parameter, and store in dataframes where columns are 'tor_c', 'tor_s', 'pol_c', and 'pol_s'
+# get one set of coefficients per external parameter, and store in dataframes where columns are 'tor_c' and 'tor_s'
 # _c and _s refer to cos and sin terms, respectively, and tor and pol to toroidal and poloidal
 dataframes = [vector_to_df(m) for m in np.split(model_vector, NTERMS)]
 
@@ -82,7 +80,7 @@ for m, param in zip(dataframes, external_parameters):
 coefficients = pd.concat(dataframes, axis = 1)
 
 # write txt file
-with open(os.path.abspath(os.path.join(basepath,'coefficients/SW_OPER_MIO_SHA_2E_00000000T000000_99999999T999999_0104.txt')), 'w') as file:
+with open(os.path.abspath(os.path.join(basepath,'coefficients/SW_OPER_EIO_SHA_2E_00000000T000000_99999999T999999_0104.txt')), 'w') as file:
     # header:
     file.write(header)
     # data:
