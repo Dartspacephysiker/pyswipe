@@ -50,18 +50,150 @@ from functools import reduce
 from builtins import range
 import warnings
 
-
-
 rc('text', usetex=False)
-
-
-# DEFAULT = object()
 
 # Defaults for deciding whether the reconstructed picture of average electrodynamics
 # is consistent with the assumed neutral wind pattern (corotation with Earth by default)
 DEFAULT_MIN_EMWORK = 0.5        # mW/m²
 DEFAULT_MIN_HALL = 0.05         # mho
 DEFAULT_MAX_HALL = 100.         # mho
+
+def _sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat):
+    """
+    In this function it is assumed that 
+    • J_e and J_n (in A/m) come from calling J_e, J_n = SWIPE.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid) OR pyamps.get_J_horiz
+    • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = SWIPE.get_efield_MA(mlat,mlt,grid) OR pyswipe.get_E, and using Emph = Ed1, Emlambda = -Ed2 * sinI
+
+    The output of this function is in mho
+    """
+
+    SigmaH = (J_e * Emlambda - J_n * Emphi)/(Emphi**2+Emlambda**2)
+    SigmaH[mlat < 0] *= -1
+
+    return SigmaH
+
+def _sigmaped_func(J_e, J_n, Emphi, Emlambda):
+    """
+    In this function it is assumed that 
+    • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid) OR pyamps.get_J_horiz
+    • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid) OR pyswipe.get_E, and using Emph = Ed1, Emlambda = -Ed2 * sinI
+
+    The output of this function is in mho
+    """
+
+    SigmaP = (J_e * Emphi + J_n * Emlambda)/(Emphi**2+Emlambda**2)
+
+    return SigmaP
+
+
+def _emwork_func(J_e, J_n, Emphi, Emlambda):
+    """
+    In this function it is assumed that 
+    • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
+    • Emphi and Emlambda (in V/m) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emphi = Ed1, Emlambda = -Ed2 * sinI
+
+    The output of this function is in mW/m²
+    """
+
+    return (J_e * Emphi + J_n * Emlambda)*1000
+
+
+def _emwork_uncertainty(J_e, J_n, Emphi, Emlambda,
+                        angle_uncertainty_deg=None,
+                        magnitude_frac_uncertainty=None,
+                        min_J_uncertainty=None,
+                        min_E_uncertainty=None,
+                        verbose=True):
+    """
+    Calculate uncertainty of EM work calculation assuming one or both of
+    i. the angle between J and E is uncertain;
+    ii. the uncertainty of the magnitudes of J and E are a given fraction of the magnitudes themselves
+
+    min_J_uncertainty should be given in units of A/m (a typical value might be, say, .005 A/m)
+
+    min_E_uncertainty should be given in units of V/m (a typical value might be, say, .001 V/m)
+    """
+
+    dJfrac = 0. if (magnitude_frac_uncertainty is None) else magnitude_frac_uncertainty
+
+    dangle = 0. if (angle_uncertainty_deg is None) else angle_uncertainty_deg
+
+    Jmag = np.sqrt(J_e**2 + J_n**2)
+    Emag = np.sqrt(Emphi**2 + Emlambda**2)
+
+    dJmag = Jmag*dJfrac
+    dEmag = Emag*dJfrac
+
+    if min_J_uncertainty is not None:
+        if verbose:
+            print(f"Setting min Jmag uncertainty to {min_J_uncertainty} A/m")
+        dJmag = np.clip(dJmag,min_J_uncertainty,None)
+    if min_E_uncertainty is not None:
+        if verbose:
+            print(f"Setting min Emag uncertainty to {min_E_uncertainty} V/m")
+        dEmag = np.clip(dEmag,min_E_uncertainty,None)
+
+    # calc angle between J and E
+    angle = np.arccos( (J_e * Emphi + J_n * Emlambda) / Jmag / Emag )
+    
+    print("from _emwork_uncertainty: EM work angle uncertainty: ",dangle," deg")
+
+    # return Jmag*Emag*np.abs(np.sin(angle) * np.deg2rad(dangle))*1000
+
+    return np.sqrt(  (dJmag*Emag *np.cos(angle) )**2 + \
+                     (Jmag *dEmag*np.cos(angle) )**2 + \
+                     (Jmag*Emag* np.sin(angle) * np.deg2rad(dangle))**2 )*1000
+
+
+def _inconsistency_mask(J_e,J_n,
+                        Emphi,Emlambda,
+                        mlat,
+                        min_Efield__mVm=None,
+                        min_emwork=None,
+                        min_hall=None,
+                        max_hall=None,
+                        verbose=False):
+    """
+    In this function it is assumed that 
+    • J_e and J_n (in A/m) come from calling J_e, J_n = SWIPE.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid) or pyamps.get_J_horiz
+    • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = SWIPE.get_efield_MA(mlat,mlt,grid) or get_E, and using Emph = Ed1, Emlambda = -Ed2 * sinI
+
+    OUTPUT
+    ======
+
+    mask : numpy.ndarray, bool
+        Mask indicating where the reconstructed picture of average electrodynamics is inconsistent with the assumed neutral wind pattern (corotation with Earth by default)
+    """
+
+    mask = np.zeros_like(J_e,dtype=bool)
+
+    if min_Efield__mVm is not None:
+        mask[np.sqrt(Emphi*Emphi+Emlambda*Emlambda)*1000 < min_Efield__mVm] = 1
+        if verbose:
+            print(f"Inconsistency mask set to zero where E-field magnitude < {min_Efield__mVm:.2f} mV/m")
+
+    if min_emwork is not None:
+        emwork = _emwork_func(J_e, J_n, Emphi, Emlambda)
+        mask[emwork < min_emwork] = 1
+        if verbose:
+            print(f"Inconsistency mask set to zero where EM work < {min_emwork:.2f} mW/m²")
+
+    if (min_hall is not None) or (max_hall is not None):
+        hall = _sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
+
+    if min_hall is not None:
+        mask[hall < min_hall] = 1
+        if verbose:
+            print(f"Inconsistency mask set to zero where Hall conductance < {min_hall:.2f} mho")
+
+    if max_hall is not None:
+        mask[hall > max_hall] = 1
+        if verbose:
+            print(f"Inconsistency mask set to zero where Hall conductance > {max_hall:.2f} mho")
+
+    return mask
+
+
 
 class SWIPE(object):
     """
@@ -269,7 +401,12 @@ class SWIPE(object):
                                  color = 'grey')# ,
                                  # color = 'lightgrey')
 
-
+        # Including these for backward compatibility with previous versions of AMPS
+        # 2025/04/25
+        self._sigmahall_func = _sigmahall_func
+        self._sigmaped_func = _sigmaped_func
+        self._emwork_func = _emwork_func
+        self._emwork_uncertainty = _emwork_uncertainty
 
     def update_model(self, v, By, Bz, tilt, f107, coeff_fn = None):
         """
@@ -827,10 +964,10 @@ class SWIPE(object):
                 if return_emphi_emlambda:
                 
                     sinI      = 2 * np.sin(self.vectorgrid[0].flatten() * d2r)/ \
-                        np.sqrt(4-3*self.coslambda_vector**2)
+                        np.sqrt(4-3*self.coslambda_vector.flatten()**2)
                 
-                    Emphi = Ed1             # eastward component
-                    Emlambda = -Ed2 * sinI  # northward component, trur eg
+                    Emphi = Ed1.ravel()             # eastward component
+                    Emlambda = -Ed2.ravel() * sinI.ravel()  # northward component, trur eg
                 
                     warnings.warn("This is untested!")
                     return Emphi.reshape(shape), Emlambda.reshape(shape)
@@ -1081,9 +1218,9 @@ class SWIPE(object):
         Emphi = Ed1             # eastward component
         Emlambda = -Ed2 * sinI  # northward component, trur eg
 
-        SigmaH = self._sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
+        SigmaH = _sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
 
-        SigmaP = self._sigmaped_func(J_e, J_n, Emphi, Emlambda)
+        SigmaP = _sigmaped_func(J_e, J_n, Emphi, Emlambda)
 
         mask = self._inconsistency_mask(J_e,J_n,
                                         Emphi,Emlambda,
@@ -1154,7 +1291,7 @@ class SWIPE(object):
         Emphi = Ed1             # eastward component
         Emlambda = -Ed2 * sinI  # northward component, trur eg
 
-        SigmaP = self._sigmaped_func(J_e, J_n, Emphi, Emlambda)
+        SigmaP = _sigmaped_func(J_e, J_n, Emphi, Emlambda)
 
         return SigmaP
 
@@ -1226,7 +1363,7 @@ class SWIPE(object):
         Emphi = Ed1             # eastward component
         Emlambda = -Ed2 * sinI  # northward component, trur eg
 
-        SigmaH = self._sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
+        SigmaH = _sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
         return SigmaH
 
 
@@ -3009,136 +3146,28 @@ class SWIPE(object):
 
         return title
 
+
     def _inconsistency_mask(self,J_e,J_n,
                             Emphi,Emlambda,
                             mlat,
+                            min_Efield__mVm=None,
+                            min_emwork=None,
+                            min_hall=None,
+                            max_hall=None,
                             verbose=False):
-        """
-        In this function it is assumed that 
-        • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
-        • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emph = Ed1, Emlambda = -Ed2 * sinI
+        return _inconsistency_mask(J_e,J_n,
+                                   Emphi,Emlambda,
+                                   mlat,
+                                   min_Efield__mVm=self.min_Efield__mVm,
+                                   min_emwork=self.min_emwork,
+                                   min_hall=self.min_hall,
+                                   max_hall=self.max_hall)
+    # def _sigmahall_func(self,):
+    #     return _sigmahall_func()
 
-        OUTPUT
-        ======
+    # def _sigmaped_func(self,):
+    #     return _sigmaped_func()
 
-        mask : numpy.ndarray, bool
-            Mask indicating where the reconstructed picture of average electrodynamics is inconsistent with the assumed neutral wind pattern (corotation with Earth by default)
-        """
-
-        mask = np.zeros_like(J_e,dtype=bool)
-
-        if self.min_Efield__mVm is not None:
-            mask[np.sqrt(Emphi*Emphi+Emlambda*Emlambda)*1000 < self.min_Efield__mVm] = 1
-            if verbose:
-                print(f"Inconsistency mask set to zero where E-field magnitude < {self.min_Efield__mVm:.2f} mV/m")
-
-        if self.min_emwork is not None:
-            emwork = self._emwork_func(J_e, J_n, Emphi, Emlambda)
-            mask[emwork < self.min_emwork] = 1
-            if verbose:
-                print(f"Inconsistency mask set to zero where EM work < {self.min_emwork:.2f} mW/m²")
-
-        if (self.min_hall is not None) or (self.max_hall is not None):
-            hall = self._sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
-
-        if self.min_hall is not None:
-            mask[hall < self.min_hall] = 1
-            if verbose:
-                print(f"Inconsistency mask set to zero where Hall conductance < {self.min_hall:.2f} mho")
-
-        if self.max_hall is not None:
-            mask[hall > self.max_hall] = 1
-            if verbose:
-                print(f"Inconsistency mask set to zero where Hall conductance > {self.max_hall:.2f} mho")
-
-        return mask
-
-
-    def _emwork_func(self, J_e, J_n, Emphi, Emlambda):
-        """
-        In this function it is assumed that 
-        • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
-        • Emphi and Emlambda (in V/m) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emphi = Ed1, Emlambda = -Ed2 * sinI
-
-        The output of this function is in mW/m²
-        """
-
-        return (J_e * Emphi + J_n * Emlambda)*1000
-
-
-    def _emwork_uncertainty(self, J_e, J_n, Emphi, Emlambda,
-                            angle_uncertainty_deg=None,
-                            magnitude_frac_uncertainty=None,
-                            min_J_uncertainty=None,
-                            min_E_uncertainty=None,
-                            verbose=True):
-        """
-        Calculate uncertainty of EM work calculation assuming one or both of
-        i. the angle between J and E is uncertain;
-        ii. the uncertainty of the magnitudes of J and E are a given fraction of the magnitudes themselves
-
-        min_J_uncertainty should be given in units of A/m (a typical value might be, say, .005 A/m)
-
-        min_E_uncertainty should be given in units of V/m (a typical value might be, say, .001 V/m)
-        """
-
-        dJfrac = 0. if (magnitude_frac_uncertainty is None) else magnitude_frac_uncertainty
-
-        dangle = 0. if (angle_uncertainty_deg is None) else angle_uncertainty_deg
-
-        Jmag = np.sqrt(J_e**2 + J_n**2)
-        Emag = np.sqrt(Emphi**2 + Emlambda**2)
-
-        dJmag = Jmag*dJfrac
-        dEmag = Emag*dJfrac
-
-        if min_J_uncertainty is not None:
-            if verbose:
-                print(f"Setting min Jmag uncertainty to {min_J_uncertainty} A/m")
-            dJmag = np.clip(dJmag,min_J_uncertainty,None)
-        if min_E_uncertainty is not None:
-            if verbose:
-                print(f"Setting min Emag uncertainty to {min_E_uncertainty} V/m")
-            dEmag = np.clip(dEmag,min_E_uncertainty,None)
-
-        # calc angle between J and E
-        angle = np.arccos( (J_e * Emphi + J_n * Emlambda) / Jmag / Emag )
-        
-        print("from _emwork_uncertainty: EM work angle uncertainty: ",dangle," deg")
-
-        # return Jmag*Emag*np.abs(np.sin(angle) * np.deg2rad(dangle))*1000
-
-        return np.sqrt(  (dJmag*Emag *np.cos(angle) )**2 + \
-                         (Jmag *dEmag*np.cos(angle) )**2 + \
-                         (Jmag*Emag* np.sin(angle) * np.deg2rad(dangle))**2 )*1000
-
-
-    def _sigmahall_func(self, J_e, J_n, Emphi, Emlambda, mlat):
-        """
-        In this function it is assumed that 
-        • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
-        • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emph = Ed1, Emlambda = -Ed2 * sinI
-
-        The output of this function is in mho
-        """
-
-        SigmaH = (J_e * Emlambda - J_n * Emphi)/(Emphi**2+Emlambda**2)
-        SigmaH[mlat < 0] *= -1
-
-        return SigmaH
-
-    def _sigmaped_func(self, J_e, J_n, Emphi, Emlambda):
-        """
-        In this function it is assumed that 
-        • J_e and J_n (in A/m) come from calling J_e, J_n = self.get_AMPS_current(mlat = mlat, mlt = mlt, grid = grid)
-        • Emphi and Emlambda (in mW/m²) come from calling Ed1, Ed2 = self.get_efield_MA(mlat,mlt,grid), and using Emph = Ed1, Emlambda = -Ed2 * sinI
-
-        The output of this function is in mho
-        """
-
-        SigmaP = (J_e * Emphi + J_n * Emlambda)/(Emphi**2+Emlambda**2)
-
-        return SigmaP
 
 
 def get_v(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
@@ -3564,3 +3593,193 @@ def get_pflux(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_
         return np.vstack([pfluxe1, pfluxe2, pfluxpar])
 
 
+def get_emwork(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
+               # coords = 'geo',
+               chunksize = 15000):
+    """ Calculate model EM work
+
+    This function uses dask to parallelize computations. That means that it is quite
+    fast and that the memory consumption will not explode unless `chunksize` is too large.
+
+    Parameters
+    ----------
+    glat : array_like
+        array of geographic latitudes (degrees)
+    glon : array_like
+        array of geographic longitudes (degrees)
+    height : array_like
+        array of geodetic heights (km)
+    time : array_like
+        list/array of datetimes, needed to calculate magnetic local time
+    v : array_like
+        array of solar wind velocities in GSM/GSE x direction (km/s)
+    By : array_like
+        array of solar wind By values (nT)
+    Bz : array_like
+        array of solar wind Bz values (nT)
+    tilt : array_like
+        array of dipole tilt angles (degrees)
+    f107 : array_like
+        array of F10.7 index values (SFU)
+    epoch : float, optional
+        epoch (year) used in conversion to magnetic coordinates with the IGRF. Default = 2015.
+    h_R : float, optional
+        reference height (km) used when calculating modified apex coordinates. Default = 110.
+    chunksize : int, optional
+        the input arrays will be split in chunks in order to parallelize
+        computations. Larger chunks consumes more memory, but might be faster. Default is 15000.
+
+    Returns
+    -------
+    emwork : array_like
+         array of EM work values (mho)
+        (same dimension as input)
+    
+    Note
+    ----
+    Array inputs should have the same dimensions.
+
+    S. M. Hatch 
+    April 2025
+    """
+
+    from pyamps import get_J_horiz
+
+    for x in [glat, glon, height]:
+        assert len(x.shape) == 1,"Not sure what happens in call to geo2apex below with non-1D input data! Change glat, glon, and height to 1D inputs"
+
+    # E-field in mV/m, apex coordinates (see get_E documentation)
+    Ed1, Ed2 = get_E(glat, glon, height, time, v, By, Bz, tilt, f107,
+                          coords = 'apex',
+                          epoch = epoch, h_R = h_R, chunksize = chunksize)
+
+    # from mV/m to V/m
+    Ed1 /= 1000.
+    Ed2 /= 1000.
+
+    # horizontal J in mA/m 
+    Je, Jn = get_J_horiz(glat, glon, height, time, v, By, Bz, tilt, f107,
+                         epoch = epoch, h_R = h_R, chunksize = chunksize)
+
+    # From mA/m to A/m
+    Je /= 1000.
+    Jn /= 1000.
+
+    # Get mlat, because we need to calculate sinI
+    a = apexpy.Apex(epoch, refh = h_R)
+    mlat, mlon = a.geo2apex(glat, glon, height)
+    sinI = 2 * np.sin(mlat * d2r)/np.sqrt(4-3*np.cos(mlat * d2r)**2)
+
+    # Use Emphi and Emlambda as approximations when assuming apex coordinates are orthogonal spherical coordinates (see Eqs 5.9 and 5.10 in Richmond, 1995)
+    Emphi = Ed1             # eastward component
+    Emlambda = -Ed2 * sinI  # northward component
+
+    emwork = _emwork_func(Je, Jn, Emphi, Emlambda)
+
+    return emwork
+
+
+def get_conductances(glat, glon, height, time, v, By, Bz, tilt, f107, epoch = 2015., h_R = 110.,
+                     # coords = 'geo',
+                     chunksize = 15000,
+                     min_Efield__mVm = None,
+                     min_emwork = DEFAULT_MIN_EMWORK,
+                     min_hall = DEFAULT_MIN_HALL,
+                     max_hall = DEFAULT_MAX_HALL):
+    """ Calculate model Hall and Pedersen conductances
+
+    This function uses dask to parallelize computations. That means that it is quite
+    fast and that the memory consumption will not explode unless `chunksize` is too large.
+
+    Parameters
+    ----------
+    glat : array_like
+        array of geographic latitudes (degrees)
+    glon : array_like
+        array of geographic longitudes (degrees)
+    height : array_like
+        array of geodetic heights (km) NOTE! There's no good reason to use anything besides 110 km, so stick with this!
+    time : array_like
+        list/array of datetimes, needed to calculate magnetic local time
+    v : array_like
+        array of solar wind velocities in GSM/GSE x direction (km/s)
+    By : array_like
+        array of solar wind By values (nT)
+    Bz : array_like
+        array of solar wind Bz values (nT)
+    tilt : array_like
+        array of dipole tilt angles (degrees)
+    f107 : array_like
+        array of F10.7 index values (SFU)
+    epoch : float, optional
+        epoch (year) used in conversion to magnetic coordinates with the IGRF. Default = 2015.
+    h_R : float, optional
+        reference height (km) used when calculating modified apex coordinates. Default = 110.
+    chunksize : int, optional
+        the input arrays will be split in chunks in order to parallelize
+        computations. Larger chunks consumes more memory, but might be faster. Default is 15000.
+
+    Returns
+    -------
+    SH : array_like
+         array of Hall conductances (mho)
+        (same dimension as input)
+    SP : array_like
+         array of Pedersen conductances (mho)
+        (same dimension as input)
+    
+    Note
+    ----
+    Array inputs should have the same dimensions.
+
+    S. M. Hatch 
+    April 2025
+    """
+
+    from pyamps import get_J_horiz
+
+    # shape = glat.shape
+    # glat, glon, height, time, v, By, Bz, tilt, f107 = map(lambda x: x.flatten(), [glat, glon, height, time, v, By, Bz, tilt, f107])
+
+    for x in [glat, glon, height]:
+        assert len(x.shape) == 1,"Not sure what happens in call to geo2apex below with non-1D input data! Change glat, glon, and height to 1D inputs"
+
+    # E-field in mV/m, apex coordinates (see get_E documentation)
+    Ed1, Ed2 = get_E(glat, glon, height, time, v, By, Bz, tilt, f107,
+                     coords = 'apex',
+                     epoch = epoch, h_R = h_R, chunksize = chunksize)
+
+    # from mV/m to V/m
+    Ed1 /= 1000.
+    Ed2 /= 1000.
+
+    # horizontal J in mA/m 
+    J_e, J_n = get_J_horiz(glat, glon, height, time, v, By, Bz, tilt, f107,
+                         epoch = epoch, h_R = h_R, chunksize = chunksize)
+
+    # From mA/m to A/m
+    J_e /= 1000.
+    J_n /= 1000.
+
+    # Get mlat, because we need to calculate sinI
+    a = apexpy.Apex(epoch, refh = h_R)
+    mlat, mlon = a.geo2apex(glat, glon, height)
+    sinI = 2 * np.sin(mlat * d2r)/np.sqrt(4-3*np.cos(mlat * d2r)**2)
+
+    # Use Emphi and Emlambda as approximations when assuming apex coordinates are orthogonal spherical coordinates (see Eqs 5.9 and 5.10 in Richmond, 1995)
+    Emphi = Ed1             # eastward component
+    Emlambda = -Ed2 * sinI  # northward component
+
+    SigmaH = _sigmahall_func(J_e, J_n, Emphi, Emlambda, mlat)
+    SigmaP = _sigmaped_func(J_e, J_n, Emphi, Emlambda)
+
+    mask = _inconsistency_mask(J_e,J_n,
+                               Emphi,Emlambda,
+                               mlat,
+                               min_Efield__mVm=min_Efield__mVm,
+                               min_emwork=min_emwork,
+                               min_hall=min_hall,
+                               max_hall=max_hall,
+                               verbose=False)
+
+    return SigmaH.reshape(shape), SigmaP.reshape(shape), mask.reshape(shape)

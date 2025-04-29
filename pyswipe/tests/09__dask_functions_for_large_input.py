@@ -2,7 +2,7 @@
 Some examples showing how to use the dask-based Swipe functions that are good at computing time series of model outputs along, say, satellite tracks.
 """
 
-from pyswipe.swipe import SWIPE, get_E, get_v, get_pflux
+from pyswipe import SWIPE, get_E, get_v, get_pflux, get_emwork, get_conductances
 from datetime import datetime
 
 import numpy as np
@@ -20,7 +20,8 @@ m = SWIPE(vsw,
           By, 
           Bz, 
           tilt, 
-          f107)
+          f107,
+          height=h_R)
 
 alat, mlt = m.vectorgrid
 alat, mlt = map(lambda x: x.flatten(), [alat, mlt])
@@ -28,7 +29,7 @@ alat, mlt = map(lambda x: x.flatten(), [alat, mlt])
 a = Apex(date=refdt,refh=h_R)
 
 alon = a.mlt2mlon(mlt, refdt)
-height = np.ones_like(alon)*300.
+height = np.ones_like(alon)*110.
 
 glat, glon, error = a.apex2geo(alat, alon, height)
 time = [refdt]*height.size
@@ -119,5 +120,54 @@ print("Comparing field-aligned poynting flux from get_pflux and SWIPE.get_poynti
 # print("v_e median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((v_ealt-v_e)/v_e*100,3)))))
 # print("v_n median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((v_nalt-v_n)/v_n*100,3)))))
 print("pflux_parallel median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((pflux[2]-pfluxpar)/pfluxpar*100,3)))))
+print("")
+
+
+## Compare em work
+emwork = m.get_emwork(mlat = alat, mlt = mlt)
+
+emwork2 = get_emwork(glat, glon, height, time, vsw, By, Bz, tilt, f107,
+                     epoch = epoch, h_R = h_R,
+                     chunksize = chunksize)
+
+
+
+print("")
+print("Comparing EM work from get_emwork and SWIPE.get_emwork")
+print("emwork median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((emwork-emwork2)/emwork*100,3)))))
+print("emwork median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((emwork-emwork2)/emwork2*100,3)))))
+print("")
+
+
+## Compare conductances
+sigmah, sigmap, mask = m.get_conductances(mlat = alat, mlt = mlt)
+
+sigmah2, sigmap2, bonus = get_conductances(glat, glon, height, time, vsw, By, Bz, tilt, f107,
+                                    epoch = epoch, h_R = h_R,
+                                    chunksize = chunksize)
+# bonus is (mlat, mlon, sinI, Emphi, Emlambda)
+
+
+d2r = np.pi/180
+sinI = 2 * np.sin(alat * d2r)/np.sqrt(4-3*np.cos(alat * d2r)**2)
+
+# The problem is not sinI
+# In [9]: np.abs((sinI-bonus[2])/sinI*100).max()
+# Out[9]: 2.3655031869288063e-06
+
+# The problem is not calculation of mlat
+# In [11]: np.max(np.abs((alat-bonus[0])))
+# Out[11]: 7.62939453125e-06
+
+# The problem is not calculation of mlon
+# In [23]: np.max(np.abs(alon -(bonus[1] % 360)))
+# Out[23]: 0.0001678466796875
+
+
+
+print("")
+print("Comparing conductances from get_conductances and SWIPE.get_conductances")
+print("sigmah median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((sigmah[mask]-sigmah2[mask])/sigmah[mask]*100,3)))))
+print("sigmap median abs % diff: {:.2f}%".format(np.median(np.abs(np.round((sigmap[mask]-sigmap2[mask])/sigmap[mask]*100,3)))))
 print("")
 
