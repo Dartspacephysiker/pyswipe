@@ -68,7 +68,7 @@ IF this were pyamps, we could point to `http://pyamps.readthedocs.io` . But it's
 
 References
 ----------
-Hatch, S. M., et al (in preparation), Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry?
+Hatch, S. M., Vanhamäki, H., Laundal, K. M., Reistad, J. P., Burchill, J. K., Lomidze, L., Knudsen, D. J., Madelaire, M., & Tesfaw, H. (2024). Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry? Annales Geophysicae, 42(1), 229–253. `doi: 10.5194/angeo-42-229-2024 <https://doi.org/10.5194/angeo-42-229-2024>`_
 
 Laundal, K. M., Finlay, C. C., Olsen, N. & Reistad, J. P. (2018), Solar wind and seasonal influence on ionospheric currents from Swarm and CHAMP measurements, Journal of Geophysical Research - Space Physics. `doi:10.1029/2018JA025387 <https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2018JA025387>`_
 
