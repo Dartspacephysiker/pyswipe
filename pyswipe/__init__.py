@@ -9,4 +9,4 @@ import pyswipe.model_utils
 
 __all__ = ["SWIPE","get_v","get_E","get_pflux", "get_emwork", "get_conductances"]
 
-__version__ = "0.9.8"
+__version__ = "1.0.0"
