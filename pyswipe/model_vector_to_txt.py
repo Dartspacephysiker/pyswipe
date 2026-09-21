@@ -1,5 +1,5 @@
 """ script to read model vector from npy (numpy save) file, and store coefficients
-    in rxt file, with wave number (n,m) along the rows, and external variables
+    in txt file, with wave number (n,m) along the rows, and external variables
     along the columns.
 
     This script is provided for transparency; when the txt file is made, it is
@@ -15,12 +15,12 @@ from .sh_utils import SHkeys
 # header
 t = time.ctime().split(' ')
 date = ' '.join([t[1], t[-1]])
-header = '# Sherical harmonic coefficients for the Swarm Hi-latitude Convection (Swarm Hi-C) model\n'
+header = '# Spherical harmonic coefficients for the Swarm Hi-latitude Convection (Swarm Hi-C) model\n'
 header = header + '# Produced ' + date
 header = header + """
 #
-# Based on ion drift measurements from Swarm (2014-05 to 2023-04).
-# Reference: Hatch, S. M., Vanhamäki, H., Laundal, K. M., Reistad, J. P., Burchill, J., Lomidze, L., Knudsen, D., Madelaire, M., & Tesfaw, H. (2023). Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry? EGUsphere, 2023, 1–41. https://doi.org/10.5194/egusphere-2023-2920
+# Based on ion drift measurements from Swarm (2014-05 to 2025-11).
+# Reference: Hatch, S. M., Vanhamäki, H., Laundal, K. M., Reistad, J. P., Burchill, J., Lomidze, L., Knudsen, D., Madelaire, M., & Tesfaw, H. (2023). Does high-latitude ionospheric electrodynamics exhibit hemispheric mirror symmetry? Annales Geophysicae, 2024, 42, 229–253. https://doi.org/10.5194/angeo-42-229-2024
 #
 # Coefficient unit: V/m
 # Apex reference height: 110 km
@@ -34,9 +34,12 @@ header = header + """
 
 
 basepath = os.path.dirname(__file__)
+modelvecfile = os.path.abspath(os.path.join(basepath,'coefficients/model_vector_NT_MT_NV_MV_65_3_45_3.npy'))
+outfile = os.path.abspath(os.path.join(basepath,'coefficients/SW_OPER_EIO_SHA_2E_00000000T000000_99999999T999999_0104.txt'))
+
 
 # load model vector and define truncation levels and external parametrisation
-model_vector = np.load(os.path.abspath(os.path.join(basepath,'coefficients/model_vector_NT_MT_NV_MV_65_3_45_3.npy')))
+model_vector = np.load(modelvecfile)
 NT, MT, NV, MV = 65, 3, 45, 3
 
 external_parameters = ['const', 'sinca', 'cosca', 'epsilon', 'epsilon_sinca', 'epsilon_cosca', 'tilt', 
@@ -80,7 +83,7 @@ for m, param in zip(dataframes, external_parameters):
 coefficients = pd.concat(dataframes, axis = 1)
 
 # write txt file
-with open(os.path.abspath(os.path.join(basepath,'coefficients/SW_OPER_EIO_SHA_2E_00000000T000000_99999999T999999_0104.txt')), 'w') as file:
+with open(outfile, 'w') as file:
     # header:
     file.write(header)
     # data:
